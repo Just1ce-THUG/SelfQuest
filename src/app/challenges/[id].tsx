@@ -1,8 +1,7 @@
-import { Link, type Href, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppButton } from '@/components/AppButton';
 import { ProgressBar } from '@/components/ProgressBar';
 import { colors } from '@/theme/colors';
 import { spacing } from '@/theme/spacing';
@@ -14,16 +13,12 @@ export default function ChallengeDetailsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Challenge details</Text>
-          <Text style={styles.description}>Placeholder details for challenge: {id}</Text>
+          <Text style={styles.title}>Детали челленджа</Text>
+          <Text style={styles.description}>Заглушка деталей для челленджа: {id}</Text>
         </View>
 
         <ProgressBar progressPercent={25} />
-        <Text style={styles.progressText}>25% complete</Text>
-
-        <Link href={'/challenges' as Href} asChild>
-          <AppButton title="Back to challenges" variant="secondary" />
-        </Link>
+        <Text style={styles.progressText}>Выполнено 25%</Text>
       </View>
     </SafeAreaView>
   );

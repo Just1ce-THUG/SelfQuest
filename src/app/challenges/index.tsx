@@ -11,9 +11,9 @@ import { spacing } from '@/theme/spacing';
 const placeholderChallenges = [
   {
     id: 'demo-numeric',
-    title: 'Read 500 pages',
-    typeLabel: 'Numeric',
-    statusLabel: 'Active',
+    title: 'Прочитать 500 страниц',
+    typeLabel: 'Числовой',
+    statusLabel: 'Активный',
     progressPercent: 25,
   },
 ];
@@ -24,8 +24,8 @@ export default function ChallengesScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         {placeholderChallenges.length === 0 ? (
           <EmptyState
-            title="No challenges yet"
-            description="Create your first challenge and start moving toward a goal."
+            title="Пока нет челленджей"
+            description="Создай первый челлендж и начни движение к цели."
           />
         ) : (
           <View style={styles.list}>
@@ -38,7 +38,7 @@ export default function ChallengesScreen() {
         )}
 
         <Link href={'/challenges/create' as Href} asChild>
-          <AppButton title="Create challenge" />
+          <AppButton title="Создать челлендж" />
         </Link>
       </ScrollView>
     </SafeAreaView>

@@ -13,15 +13,15 @@ export default function HomeScreen() {
       <View style={styles.content}>
         <EmptyState
           title="SelfQuest"
-          description="Personal challenges live here. Start with a small goal and track visible progress."
+          description="Здесь будут твои личные челленджи. Начни с небольшой цели и отслеживай понятный прогресс."
         />
 
         <Link href={'/challenges' as Href} asChild>
-          <AppButton title="View challenges" />
+          <AppButton title="Открыть челленджи" />
         </Link>
 
         <Link href={'/challenges/create' as Href} asChild>
-          <AppButton title="Create challenge" variant="secondary" />
+          <AppButton title="Создать челлендж" variant="secondary" />
         </Link>
       </View>
     </SafeAreaView>

@@ -1,4 +1,3 @@
-import { Link, type Href } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -12,20 +11,16 @@ export default function CreateChallengeScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Create challenge</Text>
+          <Text style={styles.title}>Создание челленджа</Text>
           <Text style={styles.description}>
-            This is a form placeholder. Challenge creation logic will be added in the MVP steps.
+            Это заглушка формы. Логика создания челленджа появится на следующих шагах MVP.
           </Text>
         </View>
 
-        <AppInput label="Title" placeholder="Example: 1000 push-ups" />
-        <AppInput label="Description" placeholder="Short motivation or notes" multiline />
+        <AppInput label="Название" placeholder="Например: 1000 отжиманий" />
+        <AppInput label="Описание" placeholder="Короткая мотивация или заметки" multiline />
 
-        <AppButton title="Save draft" disabled />
-
-        <Link href={'/challenges' as Href} asChild>
-          <AppButton title="Back to list" variant="secondary" />
-        </Link>
+        <AppButton title="Сохранить черновик" disabled />
       </View>
     </SafeAreaView>
   );

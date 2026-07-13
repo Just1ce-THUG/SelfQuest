@@ -14,9 +14,9 @@ export default function RootLayout() {
       <AnimatedSplashOverlay />
       <Stack>
         <Stack.Screen name="index" options={{ title: 'SelfQuest' }} />
-        <Stack.Screen name="challenges/index" options={{ title: 'Challenges' }} />
-        <Stack.Screen name="challenges/create" options={{ title: 'Create challenge' }} />
-        <Stack.Screen name="challenges/[id]" options={{ title: 'Challenge details' }} />
+        <Stack.Screen name="challenges/index" options={{ title: 'Челленджи' }} />
+        <Stack.Screen name="challenges/create" options={{ title: 'Создание челленджа' }} />
+        <Stack.Screen name="challenges/[id]" options={{ title: 'Детали челленджа' }} />
       </Stack>
     </ThemeProvider>
   );
