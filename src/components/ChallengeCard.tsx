@@ -9,11 +9,12 @@ export type ChallengeCardProps = PressableProps & {
   title: string;
   typeLabel: string;
   statusLabel: string;
+  endDateLabel?: string;
   progressPercent: number;
 };
 
 export const ChallengeCard = forwardRef<View, ChallengeCardProps>(function ChallengeCard(
-  { title, typeLabel, statusLabel, progressPercent, style, ...props },
+  { title, typeLabel, statusLabel, endDateLabel, progressPercent, style, ...props },
   ref,
 ) {
   return (
@@ -29,6 +30,7 @@ export const ChallengeCard = forwardRef<View, ChallengeCardProps>(function Chall
       <Text style={styles.meta}>
         {typeLabel} • {statusLabel}
       </Text>
+      {endDateLabel ? <Text style={styles.meta}>{endDateLabel}</Text> : null}
       <ProgressBar progressPercent={progressPercent} />
       <Text style={styles.progress}>{Math.round(progressPercent)}%</Text>
     </Pressable>
