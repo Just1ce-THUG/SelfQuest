@@ -1,6 +1,6 @@
-import { useLocalSearchParams } from 'expo-router';
+import { Link, router, type Href, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/AppButton';
@@ -13,6 +13,7 @@ import type {
   NumericProgressEntry,
   ProjectNode,
 } from '@/features/challenges/types';
+import { parsePositiveNumber, validateRequiredText } from '@/features/challenges/validation';
 import { useChallengeStore } from '@/stores/challengeStore';
 import { colors } from '@/theme/colors';
 import { spacing } from '@/theme/spacing';
@@ -21,6 +22,9 @@ import {
   calculateDailyProgress,
   calculateNumericProgress,
   calculateProjectProgress,
+  calculateProjectStageProgress,
+  calculateProjectStepProgress,
+  formatProgressPercent,
 } from '@/utils/progress';
 
 const EMPTY_NUMERIC_ENTRIES: NumericProgressEntry[] = [];
@@ -61,16 +65,16 @@ export default function ChallengeDetailsScreen() {
   const numericData = useChallengeStore((state) =>
     typeof id === 'string' ? state.numericDataByChallengeId[id] : undefined,
   );
-  const numericEntries = useChallengeStore((state) =>
+  const numericEntriesFromStore = useChallengeStore((state) =>
     typeof id === 'string' ? state.numericEntriesByChallengeId[id] : undefined,
   );
   const dailyData = useChallengeStore((state) =>
     typeof id === 'string' ? state.dailyDataByChallengeId[id] : undefined,
   );
-  const dailyEntries = useChallengeStore((state) =>
+  const dailyEntriesFromStore = useChallengeStore((state) =>
     typeof id === 'string' ? state.dailyEntriesByChallengeId[id] : undefined,
   );
-  const projectNodes = useChallengeStore((state) =>
+  const projectNodesFromStore = useChallengeStore((state) =>
     typeof id === 'string' ? state.projectNodesByChallengeId[id] : undefined,
   );
   const addNumericProgress = useChallengeStore((state) => state.addNumericProgress);
@@ -78,12 +82,18 @@ export default function ChallengeDetailsScreen() {
   const addProjectStage = useChallengeStore((state) => state.addProjectStage);
   const addProjectStep = useChallengeStore((state) => state.addProjectStep);
   const toggleProjectStep = useChallengeStore((state) => state.toggleProjectStep);
+  const deleteChallenge = useChallengeStore((state) => state.deleteChallenge);
+
+  const numericEntries = numericEntriesFromStore ?? EMPTY_NUMERIC_ENTRIES;
+  const dailyEntries = dailyEntriesFromStore ?? EMPTY_DAILY_ENTRIES;
+  const projectNodes = projectNodesFromStore ?? EMPTY_PROJECT_NODES;
 
   const [numericValue, setNumericValue] = useState('');
   const [numericError, setNumericError] = useState('');
   const [stageTitle, setStageTitle] = useState('');
   const [stageError, setStageError] = useState('');
   const [stepTitles, setStepTitles] = useState<Record<string, string>>({});
+  const [stepErrors, setStepErrors] = useState<Record<string, string>>({});
 
   if (!challenge || typeof id !== 'string') {
     return (
@@ -98,11 +108,25 @@ export default function ChallengeDetailsScreen() {
     );
   }
 
-  const handleAddNumericProgress = () => {
-    const value = Number.parseFloat(numericValue.replace(',', '.'));
+  const handleDelete = () => {
+    Alert.alert('Удалить челлендж?', 'Все данные прогресса будут удалены.', [
+      { text: 'Отмена', style: 'cancel' },
+      {
+        text: 'Удалить',
+        style: 'destructive',
+        onPress: () => {
+          deleteChallenge(challenge.id);
+          router.replace('/challenges' as Href);
+        },
+      },
+    ]);
+  };
 
-    if (!Number.isFinite(value) || value <= 0) {
-      setNumericError('Введи число больше 0.');
+  const handleAddNumericProgress = () => {
+    const value = parsePositiveNumber(numericValue);
+
+    if (value === null) {
+      setNumericError('Значение прогресса должно быть положительным числом.');
       return;
     }
 
@@ -116,27 +140,30 @@ export default function ChallengeDetailsScreen() {
   };
 
   const handleAddStage = () => {
-    const title = stageTitle.trim();
+    const error = validateRequiredText(stageTitle, 'Введи название этапа.');
 
-    if (!title) {
-      setStageError('Введи название этапа.');
+    if (error) {
+      setStageError(error);
       return;
     }
 
-    addProjectStage(challenge.id, title);
+    addProjectStage(challenge.id, stageTitle.trim());
     setStageTitle('');
     setStageError('');
   };
 
   const handleAddStep = (stageId: string) => {
-    const title = stepTitles[stageId]?.trim();
+    const title = stepTitles[stageId] ?? '';
+    const error = validateRequiredText(title, 'Введи название шага.');
 
-    if (!title) {
+    if (error) {
+      setStepErrors((current) => ({ ...current, [stageId]: error }));
       return;
     }
 
-    addProjectStep(challenge.id, stageId, title);
+    addProjectStep(challenge.id, stageId, title.trim());
     setStepTitles((current) => ({ ...current, [stageId]: '' }));
+    setStepErrors((current) => ({ ...current, [stageId]: '' }));
   };
 
   const renderNumericDetails = () => {
@@ -144,10 +171,7 @@ export default function ChallengeDetailsScreen() {
       return null;
     }
 
-    const progress = calculateNumericProgress(
-      numericData.targetValue,
-      numericEntries ?? EMPTY_NUMERIC_ENTRIES,
-    );
+    const progress = calculateNumericProgress(numericData.targetValue, numericEntries);
 
     return (
       <View style={styles.section}>
@@ -158,7 +182,11 @@ export default function ChallengeDetailsScreen() {
         <Text style={styles.bodyText}>
           Осталось: {progress.remaining} {numericData.unit}
         </Text>
-        <Text style={styles.bodyText}>Прогресс: {Math.round(progress.progressPercent)}%</Text>
+        <Text style={styles.bodyText}>Прогресс: {formatProgressPercent(progress.progressPercent)}</Text>
+
+        {numericEntries.length === 0 ? (
+          <Text style={styles.metaText}>Пока нет записей прогресса.</Text>
+        ) : null}
 
         <AppInput
           label="Сколько сделал сегодня"
@@ -178,11 +206,8 @@ export default function ChallengeDetailsScreen() {
       return null;
     }
 
-    const currentDailyEntries = dailyEntries ?? EMPTY_DAILY_ENTRIES;
-    const progress = calculateDailyProgress(challenge.durationDays, currentDailyEntries);
-    const entriesByDate = Object.fromEntries(
-      currentDailyEntries.map((entry) => [entry.date, entry]),
-    );
+    const progress = calculateDailyProgress(challenge.durationDays, dailyEntries);
+    const entriesByDate = Object.fromEntries(dailyEntries.map((entry) => [entry.date, entry]));
     const days = Array.from({ length: challenge.durationDays }, (_, index) =>
       addDays(challenge.startDate, index),
     );
@@ -194,6 +219,7 @@ export default function ChallengeDetailsScreen() {
         <Text style={styles.bodyText}>
           Выполнено дней: {progress.completedDays} / {challenge.durationDays}
         </Text>
+        <Text style={styles.bodyText}>Прогресс: {formatProgressPercent(progress.progressPercent)}</Text>
         <AppButton title="Выполнено сегодня" onPress={handleMarkTodayCompleted} />
 
         <View style={styles.dayGrid}>
@@ -215,9 +241,8 @@ export default function ChallengeDetailsScreen() {
   };
 
   const renderProjectDetails = () => {
-    const currentProjectNodes = projectNodes ?? EMPTY_PROJECT_NODES;
-    const progress = calculateProjectProgress(currentProjectNodes);
-    const stages = currentProjectNodes
+    const progress = calculateProjectProgress(projectNodes);
+    const stages = projectNodes
       .filter((node) => node.nodeType === 'stage')
       .sort((left, right) => left.orderIndex - right.orderIndex);
 
@@ -227,7 +252,7 @@ export default function ChallengeDetailsScreen() {
         <Text style={styles.bodyText}>
           Готово шагов: {progress.completedLeafItems} / {progress.totalLeafItems}
         </Text>
-        <Text style={styles.bodyText}>Прогресс: {Math.round(progress.progressPercent)}%</Text>
+        <Text style={styles.bodyText}>Прогресс: {formatProgressPercent(progress.progressPercent)}</Text>
 
         {stages.length === 0 ? (
           <EmptyState
@@ -240,8 +265,9 @@ export default function ChallengeDetailsScreen() {
               <ProjectStage
                 key={stage.id}
                 stage={stage}
-                nodes={currentProjectNodes}
+                nodes={projectNodes}
                 stepTitle={stepTitles[stage.id] ?? ''}
+                stepError={stepErrors[stage.id]}
                 onStepTitleChange={(value) =>
                   setStepTitles((current) => ({ ...current, [stage.id]: value }))
                 }
@@ -277,6 +303,13 @@ export default function ChallengeDetailsScreen() {
           </Text>
         </View>
 
+        <View style={styles.actions}>
+          <Link href={`/challenges/${challenge.id}/edit` as Href} asChild>
+            <AppButton title="Редактировать" variant="secondary" />
+          </Link>
+          <AppButton title="Удалить" variant="secondary" onPress={handleDelete} />
+        </View>
+
         {challenge.type === 'numeric' ? renderNumericDetails() : null}
         {challenge.type === 'daily' ? renderDailyDetails() : null}
         {challenge.type === 'project' ? renderProjectDetails() : null}
@@ -289,6 +322,7 @@ type ProjectStageProps = {
   stage: ProjectNode;
   nodes: ProjectNode[];
   stepTitle: string;
+  stepError?: string;
   onStepTitleChange: (value: string) => void;
   onAddStep: () => void;
   onToggleStep: (stepId: string) => void;
@@ -298,6 +332,7 @@ function ProjectStage({
   stage,
   nodes,
   stepTitle,
+  stepError,
   onStepTitleChange,
   onAddStep,
   onToggleStep,
@@ -305,10 +340,13 @@ function ProjectStage({
   const steps = nodes
     .filter((node) => node.parentId === stage.id)
     .sort((left, right) => left.orderIndex - right.orderIndex);
+  const stageProgress = calculateProjectStageProgress(stage, nodes);
 
   return (
     <View style={styles.stage}>
-      <Text style={styles.stageTitle}>{stage.title}</Text>
+      <Text style={styles.stageTitle}>
+        {stage.title} — {formatProgressPercent(stageProgress)}
+      </Text>
 
       {steps.length === 0 ? (
         <Text style={styles.metaText}>Пока нет шагов.</Text>
@@ -316,7 +354,9 @@ function ProjectStage({
         steps.map((step) => (
           <AppButton
             key={step.id}
-            title={`${step.isCompleted ? '✓' : '○'} ${step.title}`}
+            title={`${step.isCompleted ? '✓' : '○'} ${step.title} — ${formatProgressPercent(
+              calculateProjectStepProgress(step.isCompleted),
+            )}`}
             variant={step.isCompleted ? 'primary' : 'secondary'}
             onPress={() => onToggleStep(step.id)}
           />
@@ -327,6 +367,7 @@ function ProjectStage({
         label="Новый шаг"
         placeholder="Например: Собрать главный экран"
         value={stepTitle}
+        error={stepError}
         onChangeText={onStepTitleChange}
       />
       <AppButton title="Добавить шаг" variant="secondary" onPress={onAddStep} />
@@ -359,6 +400,9 @@ const styles = StyleSheet.create({
   metaText: {
     color: colors.textMuted,
     fontSize: 14,
+  },
+  actions: {
+    gap: spacing.sm,
   },
   section: {
     gap: spacing.md,

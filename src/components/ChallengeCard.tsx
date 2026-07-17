@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, type PressableProps, type View } from 'rea
 import { ProgressBar } from '@/components/ProgressBar';
 import { colors } from '@/theme/colors';
 import { spacing } from '@/theme/spacing';
+import { formatProgressPercent } from '@/utils/progress';
 
 export type ChallengeCardProps = PressableProps & {
   title: string;
@@ -32,7 +33,7 @@ export const ChallengeCard = forwardRef<View, ChallengeCardProps>(function Chall
       </Text>
       {endDateLabel ? <Text style={styles.meta}>{endDateLabel}</Text> : null}
       <ProgressBar progressPercent={progressPercent} />
-      <Text style={styles.progress}>{Math.round(progressPercent)}%</Text>
+      <Text style={styles.progress}>{formatProgressPercent(progressPercent)}</Text>
     </Pressable>
   );
 });

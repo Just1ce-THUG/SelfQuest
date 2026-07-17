@@ -25,6 +25,10 @@ function clampProgress(value: number) {
   return Math.max(0, Math.min(value, 100));
 }
 
+export function formatProgressPercent(value: number) {
+  return `${clampProgress(value).toFixed(1)}%`;
+}
+
 export function calculateNumericProgress(
   targetValue: number,
   entries: Pick<NumericProgressEntry, 'value'>[],
@@ -72,4 +76,22 @@ export function calculateProjectProgress(
     totalLeafItems,
     progressPercent,
   };
+}
+
+export function calculateProjectStepProgress(isCompleted: boolean) {
+  return isCompleted ? 100 : 0;
+}
+
+export function calculateProjectStageProgress(
+  stage: Pick<ProjectNode, 'id' | 'isCompleted'>,
+  nodes: Pick<ProjectNode, 'parentId' | 'isCompleted'>[],
+) {
+  const steps = nodes.filter((node) => node.parentId === stage.id);
+
+  if (steps.length === 0) {
+    return calculateProjectStepProgress(stage.isCompleted);
+  }
+
+  const completedSteps = steps.filter((step) => step.isCompleted).length;
+  return clampProgress((completedSteps / steps.length) * 100);
 }

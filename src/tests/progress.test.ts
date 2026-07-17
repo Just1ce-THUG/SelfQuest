@@ -4,6 +4,9 @@ import {
   calculateDailyProgress,
   calculateNumericProgress,
   calculateProjectProgress,
+  calculateProjectStageProgress,
+  calculateProjectStepProgress,
+  formatProgressPercent,
 } from '@/utils/progress';
 
 describe('progress utils', () => {
@@ -58,5 +61,34 @@ describe('progress utils', () => {
     expect(result.completedLeafItems).toBe(0);
     expect(result.totalLeafItems).toBe(0);
     expect(result.progressPercent).toBe(0);
+  });
+
+  it('formats progress percent with one decimal place', () => {
+    expect(formatProgressPercent(42)).toBe('42.0%');
+    expect(formatProgressPercent(52.36)).toBe('52.4%');
+    expect(formatProgressPercent(100)).toBe('100.0%');
+  });
+
+  it('calculates project stage progress by its steps', () => {
+    const progress = calculateProjectStageProgress(
+      { id: 'stage-1', isCompleted: false },
+      [
+        { parentId: 'stage-1', isCompleted: true },
+        { parentId: 'stage-1', isCompleted: false },
+        { parentId: 'stage-2', isCompleted: true },
+      ],
+    );
+
+    expect(progress).toBe(50);
+  });
+
+  it('calculates empty project stage progress by stage completion', () => {
+    expect(calculateProjectStageProgress({ id: 'stage-1', isCompleted: true }, [])).toBe(100);
+    expect(calculateProjectStageProgress({ id: 'stage-1', isCompleted: false }, [])).toBe(0);
+  });
+
+  it('calculates project step progress as 0 or 100', () => {
+    expect(calculateProjectStepProgress(true)).toBe(100);
+    expect(calculateProjectStepProgress(false)).toBe(0);
   });
 });

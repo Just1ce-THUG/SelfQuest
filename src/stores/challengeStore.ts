@@ -44,6 +44,14 @@ export type ChallengeStoreState = {
   addChallenge: (input: AddChallengeInput) => Challenge;
   getChallengeById: (id: string) => Challenge | undefined;
   updateChallenge: (id: string, updates: Partial<Omit<Challenge, 'id'>>) => void;
+  updateNumericChallengeData: (
+    challengeId: string,
+    updates: Partial<Pick<NumericChallengeData, 'targetValue' | 'unit'>>,
+  ) => void;
+  updateDailyChallengeData: (
+    challengeId: string,
+    updates: Partial<Pick<DailyChallengeData, 'dailyActionText'>>,
+  ) => void;
   deleteChallenge: (id: string) => void;
   addNumericProgress: (challengeId: string, value: number) => void;
   markDailyDay: (challengeId: string, date: string, status: DailyProgressStatus) => void;
@@ -285,6 +293,46 @@ export const useChallengeStore = create<ChallengeStoreState>((set, get) => ({
           : challenge,
       ),
     }));
+  },
+
+  updateNumericChallengeData: (challengeId, updates) => {
+    set((state) => {
+      const currentData = state.numericDataByChallengeId[challengeId];
+
+      if (!currentData) {
+        return {};
+      }
+
+      return {
+        numericDataByChallengeId: {
+          ...state.numericDataByChallengeId,
+          [challengeId]: {
+            ...currentData,
+            ...updates,
+          },
+        },
+      };
+    });
+  },
+
+  updateDailyChallengeData: (challengeId, updates) => {
+    set((state) => {
+      const currentData = state.dailyDataByChallengeId[challengeId];
+
+      if (!currentData) {
+        return {};
+      }
+
+      return {
+        dailyDataByChallengeId: {
+          ...state.dailyDataByChallengeId,
+          [challengeId]: {
+            ...currentData,
+            ...updates,
+          },
+        },
+      };
+    });
   },
 
   deleteChallenge: (id) => {

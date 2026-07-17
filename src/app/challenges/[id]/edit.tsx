@@ -1,11 +1,11 @@
-import { router, type Href } from 'expo-router';
+import { router, type Href, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/AppButton';
 import { AppInput } from '@/components/AppInput';
-import type { ChallengeType } from '@/features/challenges/types';
+import { EmptyState } from '@/components/EmptyState';
 import {
   hasValidationErrors,
   parsePositiveInteger,
@@ -15,32 +15,58 @@ import {
   validateNumericChallengeForm,
   type ChallengeFormValidationErrors,
 } from '@/features/challenges/validation';
-import { useChallengeStore, type AddChallengeInput } from '@/stores/challengeStore';
+import { useChallengeStore } from '@/stores/challengeStore';
 import { colors } from '@/theme/colors';
 import { spacing } from '@/theme/spacing';
+import { toDateKey } from '@/utils/dates';
 
-const typeOptions: { value: ChallengeType; label: string }[] = [
-  { value: 'numeric', label: 'Числовой' },
-  { value: 'daily', label: 'Ежедневный' },
-  { value: 'project', label: 'Проектный' },
-];
+function addDays(dateKey: string, days: number) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return toDateKey(date);
+}
 
-export default function CreateChallengeScreen() {
-  const addChallenge = useChallengeStore((state) => state.addChallenge);
-  const [type, setType] = useState<ChallengeType>('numeric');
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [durationDays, setDurationDays] = useState('30');
-  const [targetValue, setTargetValue] = useState('');
-  const [unit, setUnit] = useState('');
-  const [dailyActionText, setDailyActionText] = useState('');
+export default function EditChallengeScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const challenge = useChallengeStore((state) =>
+    typeof id === 'string' ? state.challenges.find((item) => item.id === id) : undefined,
+  );
+  const numericData = useChallengeStore((state) =>
+    typeof id === 'string' ? state.numericDataByChallengeId[id] : undefined,
+  );
+  const dailyData = useChallengeStore((state) =>
+    typeof id === 'string' ? state.dailyDataByChallengeId[id] : undefined,
+  );
+  const updateChallenge = useChallengeStore((state) => state.updateChallenge);
+  const updateNumericChallengeData = useChallengeStore((state) => state.updateNumericChallengeData);
+  const updateDailyChallengeData = useChallengeStore((state) => state.updateDailyChallengeData);
+
+  const [title, setTitle] = useState(challenge?.title ?? '');
+  const [description, setDescription] = useState(challenge?.description ?? '');
+  const [durationDays, setDurationDays] = useState(challenge?.durationDays.toString() ?? '30');
+  const [targetValue, setTargetValue] = useState(numericData?.targetValue.toString() ?? '');
+  const [unit, setUnit] = useState(numericData?.unit ?? '');
+  const [dailyActionText, setDailyActionText] = useState(dailyData?.dailyActionText ?? '');
   const [errors, setErrors] = useState<ChallengeFormValidationErrors>({});
+
+  if (!challenge || typeof id !== 'string') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.content}>
+          <EmptyState
+            title="Челлендж не найден"
+            description="Возможно, он был удален или ссылка устарела."
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const handleSave = () => {
     const nextErrors =
-      type === 'numeric'
+      challenge.type === 'numeric'
         ? validateNumericChallengeForm({ title, durationDays, targetValue, unit })
-        : type === 'daily'
+        : challenge.type === 'daily'
           ? validateDailyChallengeForm({ title, durationDays, dailyActionText })
           : validateBaseChallengeForm({ title, durationDays });
 
@@ -50,38 +76,28 @@ export default function CreateChallengeScreen() {
       return;
     }
 
-    const parsedDurationDays = parsePositiveInteger(durationDays) ?? 1;
-    const cleanTitle = title.trim();
-    const cleanDescription = description.trim();
-    let input: AddChallengeInput;
+    const parsedDurationDays = parsePositiveInteger(durationDays) ?? challenge.durationDays;
 
-    if (type === 'numeric') {
-      input = {
-        type,
-        title: cleanTitle,
-        description: cleanDescription,
-        durationDays: parsedDurationDays,
-        targetValue: parsePositiveNumber(targetValue) ?? 1,
+    updateChallenge(challenge.id, {
+      title: title.trim(),
+      description: description.trim(),
+      durationDays: parsedDurationDays,
+      endDate: addDays(challenge.startDate, Math.max(parsedDurationDays - 1, 0)),
+    });
+
+    if (challenge.type === 'numeric') {
+      updateNumericChallengeData(challenge.id, {
+        targetValue: parsePositiveNumber(targetValue) ?? numericData?.targetValue ?? 1,
         unit: unit.trim(),
-      };
-    } else if (type === 'daily') {
-      input = {
-        type,
-        title: cleanTitle,
-        description: cleanDescription,
-        durationDays: parsedDurationDays,
-        dailyActionText: dailyActionText.trim(),
-      };
-    } else {
-      input = {
-        type,
-        title: cleanTitle,
-        description: cleanDescription,
-        durationDays: parsedDurationDays,
-      };
+      });
     }
 
-    const challenge = addChallenge(input);
+    if (challenge.type === 'daily') {
+      updateDailyChallengeData(challenge.id, {
+        dailyActionText: dailyActionText.trim(),
+      });
+    }
+
     router.replace(`/challenges/${challenge.id}` as Href);
   };
 
@@ -89,24 +105,8 @@ export default function CreateChallengeScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Создание челленджа</Text>
-          <Text style={styles.description}>
-            Заполни минимальные поля. Данные пока сохраняются только в памяти приложения.
-          </Text>
-        </View>
-
-        <View style={styles.typeRow}>
-          {typeOptions.map((option) => (
-            <AppButton
-              key={option.value}
-              title={option.label}
-              variant={type === option.value ? 'primary' : 'secondary'}
-              onPress={() => {
-                setType(option.value);
-                setErrors({});
-              }}
-            />
-          ))}
+          <Text style={styles.title}>Редактирование челленджа</Text>
+          <Text style={styles.description}>Измени базовые параметры челленджа.</Text>
         </View>
 
         <AppInput
@@ -132,7 +132,7 @@ export default function CreateChallengeScreen() {
           onChangeText={setDurationDays}
         />
 
-        {type === 'numeric' ? (
+        {challenge.type === 'numeric' ? (
           <>
             <AppInput
               label="Целевое число"
@@ -152,7 +152,7 @@ export default function CreateChallengeScreen() {
           </>
         ) : null}
 
-        {type === 'daily' ? (
+        {challenge.type === 'daily' ? (
           <AppInput
             label="Ежедневное действие"
             placeholder="Например: прочитать 5 страниц"
@@ -162,11 +162,11 @@ export default function CreateChallengeScreen() {
           />
         ) : null}
 
-        {type === 'project' ? (
-          <Text style={styles.helperText}>Этапы и шаги можно будет добавить на экране деталей.</Text>
+        {challenge.type === 'project' ? (
+          <Text style={styles.helperText}>Этапы и шаги редактируются на экране деталей.</Text>
         ) : null}
 
-        <AppButton title="Сохранить челлендж" onPress={handleSave} />
+        <AppButton title="Сохранить изменения" onPress={handleSave} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -193,9 +193,6 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 16,
     lineHeight: 22,
-  },
-  typeRow: {
-    gap: spacing.sm,
   },
   helperText: {
     color: colors.textMuted,
