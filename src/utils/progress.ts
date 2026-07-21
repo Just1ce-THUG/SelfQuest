@@ -29,6 +29,10 @@ export function formatProgressPercent(value: number) {
   return `${clampProgress(value).toFixed(1)}%`;
 }
 
+export function isProgressCompleted(value: number) {
+  return clampProgress(value) >= 100;
+}
+
 export function calculateNumericProgress(
   targetValue: number,
   entries: Pick<NumericProgressEntry, 'value'>[],

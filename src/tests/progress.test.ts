@@ -7,6 +7,7 @@ import {
   calculateProjectStageProgress,
   calculateProjectStepProgress,
   formatProgressPercent,
+  isProgressCompleted,
 } from '@/utils/progress';
 
 describe('progress utils', () => {
@@ -67,6 +68,12 @@ describe('progress utils', () => {
     expect(formatProgressPercent(42)).toBe('42.0%');
     expect(formatProgressPercent(52.36)).toBe('52.4%');
     expect(formatProgressPercent(100)).toBe('100.0%');
+  });
+
+  it('detects completed progress at 100%', () => {
+    expect(isProgressCompleted(99.9)).toBe(false);
+    expect(isProgressCompleted(100)).toBe(true);
+    expect(isProgressCompleted(120)).toBe(true);
   });
 
   it('calculates project stage progress by its steps', () => {

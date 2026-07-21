@@ -1,12 +1,13 @@
-import { Link, router, type Href, useLocalSearchParams } from 'expo-router';
+import { router, type Href, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/AppButton';
 import { AppInput } from '@/components/AppInput';
 import { EmptyState } from '@/components/EmptyState';
 import { ProgressBar } from '@/components/ProgressBar';
+import { StatusBadge } from '@/components/StatusBadge';
 import type {
   DailyProgressEntry,
   DailyProgressStatus,
@@ -23,8 +24,8 @@ import {
   calculateNumericProgress,
   calculateProjectProgress,
   calculateProjectStageProgress,
-  calculateProjectStepProgress,
   formatProgressPercent,
+  isProgressCompleted,
 } from '@/utils/progress';
 
 const EMPTY_NUMERIC_ENTRIES: NumericProgressEntry[] = [];
@@ -107,6 +108,27 @@ export default function ChallengeDetailsScreen() {
       </SafeAreaView>
     );
   }
+
+  const numericProgress =
+    challenge.type === 'numeric' && numericData
+      ? calculateNumericProgress(numericData.targetValue, numericEntries).progressPercent
+      : 0;
+  const dailyProgress =
+    challenge.type === 'daily'
+      ? calculateDailyProgress(challenge.durationDays, dailyEntries).progressPercent
+      : 0;
+  const projectProgress =
+    challenge.type === 'project' ? calculateProjectProgress(projectNodes).progressPercent : 0;
+  const currentProgress =
+    challenge.type === 'numeric'
+      ? numericProgress
+      : challenge.type === 'daily'
+        ? dailyProgress
+        : projectProgress;
+
+  const handleEdit = () => {
+    router.replace(`/challenges/${challenge.id}/edit` as Href);
+  };
 
   const handleDelete = () => {
     Alert.alert('Удалить челлендж?', 'Все данные прогресса будут удалены.', [
@@ -280,7 +302,7 @@ export default function ChallengeDetailsScreen() {
 
         <AppInput
           label="Новый этап"
-          placeholder="Например: Сделать интерфейс"
+          placeholder="Название этапа"
           value={stageTitle}
           error={stageError}
           onChangeText={setStageTitle}
@@ -294,7 +316,10 @@ export default function ChallengeDetailsScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>{challenge.title}</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>{challenge.title}</Text>
+            <StatusBadge status={isProgressCompleted(currentProgress) ? 'completed' : 'active'} />
+          </View>
           {challenge.description ? (
             <Text style={styles.description}>{challenge.description}</Text>
           ) : null}
@@ -304,9 +329,7 @@ export default function ChallengeDetailsScreen() {
         </View>
 
         <View style={styles.actions}>
-          <Link href={`/challenges/${challenge.id}/edit` as Href} asChild>
-            <AppButton title="Редактировать" variant="secondary" />
-          </Link>
+          <AppButton title="Редактировать" variant="secondary" onPress={handleEdit} />
           <AppButton title="Удалить" variant="secondary" onPress={handleDelete} />
         </View>
 
@@ -344,28 +367,31 @@ function ProjectStage({
 
   return (
     <View style={styles.stage}>
-      <Text style={styles.stageTitle}>
-        {stage.title} — {formatProgressPercent(stageProgress)}
-      </Text>
+      <View style={styles.stageHeader}>
+        <Text style={styles.stageTitle}>
+          {stage.title} — {formatProgressPercent(stageProgress)}
+        </Text>
+        <StatusBadge status={isProgressCompleted(stageProgress) ? 'completed' : 'active'} />
+      </View>
 
       {steps.length === 0 ? (
         <Text style={styles.metaText}>Пока нет шагов.</Text>
       ) : (
         steps.map((step) => (
-          <AppButton
+          <Pressable
             key={step.id}
-            title={`${step.isCompleted ? '✓' : '○'} ${step.title} — ${formatProgressPercent(
-              calculateProjectStepProgress(step.isCompleted),
-            )}`}
-            variant={step.isCompleted ? 'primary' : 'secondary'}
-            onPress={() => onToggleStep(step.id)}
-          />
+            style={({ pressed }) => [styles.stepRow, pressed && styles.pressed]}
+            onPress={() => onToggleStep(step.id)}>
+            <Text style={styles.stepText}>
+              {step.isCompleted ? '✓' : '○'} {step.title}
+            </Text>
+          </Pressable>
         ))
       )}
 
       <AppInput
         label="Новый шаг"
-        placeholder="Например: Собрать главный экран"
+        placeholder="Название шага"
         value={stepTitle}
         error={stepError}
         onChangeText={onStepTitleChange}
@@ -387,7 +413,13 @@ const styles = StyleSheet.create({
   header: {
     gap: spacing.xs,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
   title: {
+    flex: 1,
     color: colors.text,
     fontSize: 28,
     fontWeight: '700',
@@ -426,9 +458,28 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     padding: spacing.md,
   },
+  stageHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
   stageTitle: {
+    flex: 1,
     color: colors.text,
     fontSize: 18,
     fontWeight: '700',
+  },
+  stepRow: {
+    borderRadius: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  pressed: {
+    opacity: 0.85,
+  },
+  stepText: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

@@ -1,7 +1,8 @@
 import { forwardRef } from 'react';
-import { Pressable, StyleSheet, Text, type PressableProps, type View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type PressableProps } from 'react-native';
 
 import { ProgressBar } from '@/components/ProgressBar';
+import { StatusBadge, type StatusBadgeStatus } from '@/components/StatusBadge';
 import { colors } from '@/theme/colors';
 import { spacing } from '@/theme/spacing';
 import { formatProgressPercent } from '@/utils/progress';
@@ -9,13 +10,12 @@ import { formatProgressPercent } from '@/utils/progress';
 export type ChallengeCardProps = PressableProps & {
   title: string;
   typeLabel: string;
-  statusLabel: string;
-  endDateLabel?: string;
+  status: StatusBadgeStatus;
   progressPercent: number;
 };
 
 export const ChallengeCard = forwardRef<View, ChallengeCardProps>(function ChallengeCard(
-  { title, typeLabel, statusLabel, endDateLabel, progressPercent, style, ...props },
+  { title, typeLabel, status, progressPercent, style, ...props },
   ref,
 ) {
   return (
@@ -27,11 +27,11 @@ export const ChallengeCard = forwardRef<View, ChallengeCardProps>(function Chall
         typeof style === 'function' ? style(state) : style,
       ]}
       {...props}>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.meta}>
-        {typeLabel} • {statusLabel}
-      </Text>
-      {endDateLabel ? <Text style={styles.meta}>{endDateLabel}</Text> : null}
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>{title}</Text>
+        <StatusBadge status={status} />
+      </View>
+      <Text style={styles.meta}>{typeLabel}</Text>
       <ProgressBar progressPercent={progressPercent} />
       <Text style={styles.progress}>{formatProgressPercent(progressPercent)}</Text>
     </Pressable>
@@ -51,9 +51,15 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   title: {
+    flex: 1,
     color: colors.text,
     fontSize: 18,
     fontWeight: '700',
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
   },
   meta: {
     color: colors.textMuted,

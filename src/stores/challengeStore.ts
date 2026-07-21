@@ -12,6 +12,12 @@ import type {
   ProjectNode,
 } from '@/features/challenges/types';
 import { toDateKey } from '@/utils/dates';
+import {
+  calculateDailyProgress,
+  calculateNumericProgress,
+  calculateProjectProgress,
+  isProgressCompleted,
+} from '@/utils/progress';
 
 type BaseChallengeInput = {
   type: ChallengeType;
@@ -93,6 +99,22 @@ function createChallengeBase(
     createdAt: now,
     updatedAt: now,
   };
+}
+
+function getStatusFromProgress(progressPercent: number): ChallengeStatus {
+  return isProgressCompleted(progressPercent) ? 'completed' : 'active';
+}
+
+function updateChallengeStatus(
+  challenges: Challenge[],
+  challengeId: string,
+  status: ChallengeStatus,
+) {
+  return challenges.map((challenge) =>
+    challenge.id === challengeId
+      ? { ...challenge, status, updatedAt: new Date().toISOString() }
+      : challenge,
+  );
 }
 
 const demoNumericId = 'demo-numeric';
@@ -286,13 +308,31 @@ export const useChallengeStore = create<ChallengeStoreState>((set, get) => ({
   getChallengeById: (id) => get().challenges.find((challenge) => challenge.id === id),
 
   updateChallenge: (id, updates) => {
-    set((state) => ({
-      challenges: state.challenges.map((challenge) =>
+    set((state) => {
+      const nextChallenges = state.challenges.map((challenge) =>
         challenge.id === id
           ? { ...challenge, ...updates, updatedAt: new Date().toISOString() }
           : challenge,
-      ),
-    }));
+      );
+      const updatedChallenge = nextChallenges.find((challenge) => challenge.id === id);
+
+      if (!updatedChallenge || updatedChallenge.type !== 'daily') {
+        return { challenges: nextChallenges };
+      }
+
+      const progress = calculateDailyProgress(
+        updatedChallenge.durationDays,
+        state.dailyEntriesByChallengeId[id] ?? [],
+      );
+
+      return {
+        challenges: updateChallengeStatus(
+          nextChallenges,
+          id,
+          getStatusFromProgress(progress.progressPercent),
+        ),
+      };
+    });
   },
 
   updateNumericChallengeData: (challengeId, updates) => {
@@ -311,6 +351,16 @@ export const useChallengeStore = create<ChallengeStoreState>((set, get) => ({
             ...updates,
           },
         },
+        challenges: updateChallengeStatus(
+          state.challenges,
+          challengeId,
+          getStatusFromProgress(
+            calculateNumericProgress(
+              updates.targetValue ?? currentData.targetValue,
+              state.numericEntriesByChallengeId[challengeId] ?? [],
+            ).progressPercent,
+          ),
+        ),
       };
     });
   },
@@ -366,12 +416,23 @@ export const useChallengeStore = create<ChallengeStoreState>((set, get) => ({
       updatedAt: timestamp,
     };
 
-    set((state) => ({
-      numericEntriesByChallengeId: {
-        ...state.numericEntriesByChallengeId,
-        [challengeId]: [...(state.numericEntriesByChallengeId[challengeId] ?? []), entry],
-      },
-    }));
+    set((state) => {
+      const nextEntries = [...(state.numericEntriesByChallengeId[challengeId] ?? []), entry];
+      const targetValue = state.numericDataByChallengeId[challengeId]?.targetValue ?? 0;
+      const progress = calculateNumericProgress(targetValue, nextEntries);
+
+      return {
+        numericEntriesByChallengeId: {
+          ...state.numericEntriesByChallengeId,
+          [challengeId]: nextEntries,
+        },
+        challenges: updateChallengeStatus(
+          state.challenges,
+          challengeId,
+          getStatusFromProgress(progress.progressPercent),
+        ),
+      };
+    });
   },
 
   markDailyDay: (challengeId, date, status) => {
@@ -401,6 +462,16 @@ export const useChallengeStore = create<ChallengeStoreState>((set, get) => ({
           ...state.dailyEntriesByChallengeId,
           [challengeId]: nextEntries,
         },
+        challenges: updateChallengeStatus(
+          state.challenges,
+          challengeId,
+          getStatusFromProgress(
+            calculateDailyProgress(
+              state.challenges.find((challenge) => challenge.id === challengeId)?.durationDays ?? 0,
+              nextEntries,
+            ).progressPercent,
+          ),
+        ),
       };
     });
   },
@@ -427,6 +498,7 @@ export const useChallengeStore = create<ChallengeStoreState>((set, get) => ({
           ...state.projectNodesByChallengeId,
           [challengeId]: [...nodes, stage],
         },
+        challenges: updateChallengeStatus(state.challenges, challengeId, 'active'),
       };
     });
   },
@@ -453,20 +525,31 @@ export const useChallengeStore = create<ChallengeStoreState>((set, get) => ({
           ...state.projectNodesByChallengeId,
           [challengeId]: [...nodes, step],
         },
+        challenges: updateChallengeStatus(state.challenges, challengeId, 'active'),
       };
     });
   },
 
   toggleProjectStep: (challengeId, nodeId) => {
-    set((state) => ({
-      projectNodesByChallengeId: {
-        ...state.projectNodesByChallengeId,
-        [challengeId]: (state.projectNodesByChallengeId[challengeId] ?? []).map((node) =>
+    set((state) => {
+      const nextNodes = (state.projectNodesByChallengeId[challengeId] ?? []).map((node) =>
           node.id === nodeId && node.nodeType === 'step'
             ? { ...node, isCompleted: !node.isCompleted, updatedAt: new Date().toISOString() }
             : node,
+        );
+      const progress = calculateProjectProgress(nextNodes);
+
+      return {
+        projectNodesByChallengeId: {
+          ...state.projectNodesByChallengeId,
+          [challengeId]: nextNodes,
+        },
+        challenges: updateChallengeStatus(
+          state.challenges,
+          challengeId,
+          getStatusFromProgress(progress.progressPercent),
         ),
-      },
-    }));
+      };
+    });
   },
 }));

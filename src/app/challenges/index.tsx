@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppButton } from '@/components/AppButton';
 import { ChallengeCard } from '@/components/ChallengeCard';
 import { EmptyState } from '@/components/EmptyState';
-import type { Challenge, ChallengeStatus, ChallengeType } from '@/features/challenges/types';
+import type { Challenge, ChallengeType } from '@/features/challenges/types';
 import { useChallengeStore } from '@/stores/challengeStore';
 import { colors } from '@/theme/colors';
 import { spacing } from '@/theme/spacing';
@@ -13,18 +13,13 @@ import {
   calculateDailyProgress,
   calculateNumericProgress,
   calculateProjectProgress,
+  isProgressCompleted,
 } from '@/utils/progress';
 
 const typeLabels: Record<ChallengeType, string> = {
   numeric: 'Числовой',
   daily: 'Ежедневный',
   project: 'Проектный',
-};
-
-const statusLabels: Record<ChallengeStatus, string> = {
-  active: 'Активный',
-  completed: 'Завершен',
-  archived: 'В архиве',
 };
 
 function getChallengeProgress(
@@ -39,17 +34,17 @@ function getChallengeProgress(
 ) {
   if (challenge.type === 'numeric') {
     const data = state.numericDataByChallengeId[challenge.id];
-    const entries = state.numericEntriesByChallengeId[challenge.id] ?? [];
-    return calculateNumericProgress(data?.targetValue ?? 0, entries).progressPercent;
+    const entries = state.numericEntriesByChallengeId[challenge.id];
+    return calculateNumericProgress(data?.targetValue ?? 0, entries ?? []).progressPercent;
   }
 
   if (challenge.type === 'daily') {
-    const entries = state.dailyEntriesByChallengeId[challenge.id] ?? [];
-    return calculateDailyProgress(challenge.durationDays, entries).progressPercent;
+    const entries = state.dailyEntriesByChallengeId[challenge.id];
+    return calculateDailyProgress(challenge.durationDays, entries ?? []).progressPercent;
   }
 
-  const nodes = state.projectNodesByChallengeId[challenge.id] ?? [];
-  return calculateProjectProgress(nodes).progressPercent;
+  const nodes = state.projectNodesByChallengeId[challenge.id];
+  return calculateProjectProgress(nodes ?? []).progressPercent;
 }
 
 export default function ChallengesScreen() {
@@ -77,17 +72,20 @@ export default function ChallengesScreen() {
           />
         ) : (
           <View style={styles.list}>
-            {challenges.map((challenge) => (
-              <Link key={challenge.id} href={`/challenges/${challenge.id}` as Href} asChild>
-                <ChallengeCard
-                  title={challenge.title}
-                  typeLabel={typeLabels[challenge.type]}
-                  statusLabel={statusLabels[challenge.status]}
-                  endDateLabel={`До ${challenge.endDate}`}
-                  progressPercent={getChallengeProgress(challenge, progressState)}
-                />
-              </Link>
-            ))}
+            {challenges.map((challenge) => {
+              const progressPercent = getChallengeProgress(challenge, progressState);
+
+              return (
+                <Link key={challenge.id} href={`/challenges/${challenge.id}` as Href} asChild>
+                  <ChallengeCard
+                    title={challenge.title}
+                    typeLabel={typeLabels[challenge.type]}
+                    status={isProgressCompleted(progressPercent) ? 'completed' : 'active'}
+                    progressPercent={progressPercent}
+                  />
+                </Link>
+              );
+            })}
           </View>
         )}
 
