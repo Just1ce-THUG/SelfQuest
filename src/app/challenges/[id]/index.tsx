@@ -1,8 +1,9 @@
 import { router, type Href, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ActionMenuButton } from '@/components/ActionMenuButton';
 import { AppButton } from '@/components/AppButton';
 import { AppInput } from '@/components/AppInput';
 import { EmptyState } from '@/components/EmptyState';
@@ -82,8 +83,9 @@ export default function ChallengeDetailsScreen() {
   const markDailyDay = useChallengeStore((state) => state.markDailyDay);
   const addProjectStage = useChallengeStore((state) => state.addProjectStage);
   const addProjectStep = useChallengeStore((state) => state.addProjectStep);
+  const updateProjectNodeTitle = useChallengeStore((state) => state.updateProjectNodeTitle);
+  const deleteProjectNode = useChallengeStore((state) => state.deleteProjectNode);
   const toggleProjectStep = useChallengeStore((state) => state.toggleProjectStep);
-  const deleteChallenge = useChallengeStore((state) => state.deleteChallenge);
 
   const numericEntries = numericEntriesFromStore ?? EMPTY_NUMERIC_ENTRIES;
   const dailyEntries = dailyEntriesFromStore ?? EMPTY_DAILY_ENTRIES;
@@ -91,10 +93,15 @@ export default function ChallengeDetailsScreen() {
 
   const [numericValue, setNumericValue] = useState('');
   const [numericError, setNumericError] = useState('');
-  const [stageTitle, setStageTitle] = useState('');
-  const [stageError, setStageError] = useState('');
-  const [stepTitles, setStepTitles] = useState<Record<string, string>>({});
-  const [stepErrors, setStepErrors] = useState<Record<string, string>>({});
+  const [stepTitle, setStepTitle] = useState('');
+  const [stepError, setStepError] = useState('');
+  const [stageTitles, setStageTitles] = useState<Record<string, string>>({});
+  const [stageErrors, setStageErrors] = useState<Record<string, string>>({});
+  const [actionStepId, setActionStepId] = useState('');
+  const [editingStepId, setEditingStepId] = useState('');
+  const [editingStepTitle, setEditingStepTitle] = useState('');
+  const [editingStepError, setEditingStepError] = useState('');
+  const [pendingDeletedStageIds, setPendingDeletedStageIds] = useState<string[]>([]);
 
   if (!challenge || typeof id !== 'string') {
     return (
@@ -125,24 +132,18 @@ export default function ChallengeDetailsScreen() {
       : challenge.type === 'daily'
         ? dailyProgress
         : projectProgress;
-
-  const handleEdit = () => {
-    router.replace(`/challenges/${challenge.id}/edit` as Href);
-  };
-
-  const handleDelete = () => {
-    Alert.alert('Удалить челлендж?', 'Все данные прогресса будут удалены.', [
-      { text: 'Отмена', style: 'cancel' },
-      {
-        text: 'Удалить',
-        style: 'destructive',
-        onPress: () => {
-          deleteChallenge(challenge.id);
-          router.replace('/challenges' as Href);
-        },
-      },
-    ]);
-  };
+  const projectStepCards = projectNodes
+    .filter((node) => node.nodeType === 'stage')
+    .sort((left, right) => left.orderIndex - right.orderIndex);
+  const actionStepIndex = projectStepCards.findIndex((step) => step.id === actionStepId);
+  const actionStep = actionStepIndex >= 0 ? projectStepCards[actionStepIndex] : undefined;
+  const editingStep = projectStepCards.find((step) => step.id === editingStepId);
+  const editingStepStages = editingStep
+    ? projectNodes
+        .filter((node) => node.parentId === editingStep.id)
+        .filter((node) => !pendingDeletedStageIds.includes(node.id))
+        .sort((left, right) => left.orderIndex - right.orderIndex)
+    : EMPTY_PROJECT_NODES;
 
   const handleAddNumericProgress = () => {
     const value = parsePositiveNumber(numericValue);
@@ -161,31 +162,85 @@ export default function ChallengeDetailsScreen() {
     markDailyDay(challenge.id, toDateKey(new Date()), 'completed');
   };
 
-  const handleAddStage = () => {
-    const error = validateRequiredText(stageTitle, 'Введи название этапа.');
+  const handleAddStepCard = () => {
+    const error = validateRequiredText(stepTitle, 'Введи название шага.');
 
     if (error) {
-      setStageError(error);
+      setStepError(error);
       return;
     }
 
-    addProjectStage(challenge.id, stageTitle.trim());
-    setStageTitle('');
-    setStageError('');
+    addProjectStage(challenge.id, stepTitle.trim());
+    setStepTitle('');
+    setStepError('');
   };
 
-  const handleAddStep = (stageId: string) => {
-    const title = stepTitles[stageId] ?? '';
-    const error = validateRequiredText(title, 'Введи название шага.');
+  const handleAddStageInsideStep = (stepId: string) => {
+    const title = stageTitles[stepId] ?? '';
+    const error = validateRequiredText(title, 'Введи название этапа.');
 
     if (error) {
-      setStepErrors((current) => ({ ...current, [stageId]: error }));
+      setStageErrors((current) => ({ ...current, [stepId]: error }));
       return;
     }
 
-    addProjectStep(challenge.id, stageId, title.trim());
-    setStepTitles((current) => ({ ...current, [stageId]: '' }));
-    setStepErrors((current) => ({ ...current, [stageId]: '' }));
+    addProjectStep(challenge.id, stepId, title.trim());
+    setStageTitles((current) => ({ ...current, [stepId]: '' }));
+    setStageErrors((current) => ({ ...current, [stepId]: '' }));
+  };
+
+  const openEditStep = (step: ProjectNode) => {
+    setActionStepId('');
+    setEditingStepId(step.id);
+    setEditingStepTitle(step.title);
+    setEditingStepError('');
+    setPendingDeletedStageIds([]);
+  };
+
+  const closeEditStep = () => {
+    setEditingStepId('');
+    setEditingStepTitle('');
+    setEditingStepError('');
+    setPendingDeletedStageIds([]);
+  };
+
+  const confirmDeleteStep = (step: ProjectNode) => {
+    setActionStepId('');
+    Alert.alert('Удалить шаг?', 'Все вложенные этапы будут удалены.', [
+      { text: 'Отмена', style: 'cancel' },
+      {
+        text: 'Удалить',
+        style: 'destructive',
+        onPress: () => deleteProjectNode(challenge.id, step.id),
+      },
+    ]);
+  };
+
+  const confirmDeleteStageFromEditor = (stage: ProjectNode) => {
+    Alert.alert('Удалить этап?', 'Это действие нельзя отменить.', [
+      { text: 'Отмена', style: 'cancel' },
+      {
+        text: 'Удалить',
+        style: 'destructive',
+        onPress: () =>
+          setPendingDeletedStageIds((current) =>
+            current.includes(stage.id) ? current : [...current, stage.id],
+          ),
+      },
+    ]);
+  };
+
+  const saveEditedStep = () => {
+    const error = validateRequiredText(editingStepTitle, 'Название шага не может быть пустым.');
+
+    if (error) {
+      setEditingStepError(error);
+      return;
+    }
+
+    updateProjectNodeTitle(challenge.id, editingStepId, editingStepTitle.trim());
+    pendingDeletedStageIds.forEach((stageId) => deleteProjectNode(challenge.id, stageId));
+    closeEditStep();
   };
 
   const renderNumericDetails = () => {
@@ -264,50 +319,49 @@ export default function ChallengeDetailsScreen() {
 
   const renderProjectDetails = () => {
     const progress = calculateProjectProgress(projectNodes);
-    const stages = projectNodes
-      .filter((node) => node.nodeType === 'stage')
-      .sort((left, right) => left.orderIndex - right.orderIndex);
 
     return (
       <View style={styles.section}>
         <ProgressBar progressPercent={progress.progressPercent} />
         <Text style={styles.bodyText}>
-          Готово шагов: {progress.completedLeafItems} / {progress.totalLeafItems}
+          Готово этапов: {progress.completedLeafItems} / {progress.totalLeafItems}
         </Text>
         <Text style={styles.bodyText}>Прогресс: {formatProgressPercent(progress.progressPercent)}</Text>
 
-        {stages.length === 0 ? (
+        {projectStepCards.length === 0 ? (
           <EmptyState
-            title="Пока нет этапов"
-            description="Добавь первый этап, чтобы разбить проект на понятные части."
+            title="Пока нет шагов"
+            description="Добавь первый шаг, чтобы разбить проект на понятные части."
           />
         ) : (
           <View style={styles.projectList}>
-            {stages.map((stage) => (
-              <ProjectStage
-                key={stage.id}
-                stage={stage}
+            {projectStepCards.map((stepCard, index) => (
+              <ProjectStepCard
+                key={stepCard.id}
+                index={index}
+                stepCard={stepCard}
                 nodes={projectNodes}
-                stepTitle={stepTitles[stage.id] ?? ''}
-                stepError={stepErrors[stage.id]}
-                onStepTitleChange={(value) =>
-                  setStepTitles((current) => ({ ...current, [stage.id]: value }))
+                stageTitle={stageTitles[stepCard.id] ?? ''}
+                stageError={stageErrors[stepCard.id]}
+                onStageTitleChange={(value) =>
+                  setStageTitles((current) => ({ ...current, [stepCard.id]: value }))
                 }
-                onAddStep={() => handleAddStep(stage.id)}
-                onToggleStep={(stepId) => toggleProjectStep(challenge.id, stepId)}
+                onAddStage={() => handleAddStageInsideStep(stepCard.id)}
+                onToggleStage={(stageId) => toggleProjectStep(challenge.id, stageId)}
+                onOpenActions={() => setActionStepId(stepCard.id)}
               />
             ))}
           </View>
         )}
 
         <AppInput
-          label="Новый этап"
-          placeholder="Название этапа"
-          value={stageTitle}
-          error={stageError}
-          onChangeText={setStageTitle}
+          label="Новый шаг"
+          placeholder="Название шага"
+          value={stepTitle}
+          error={stepError}
+          onChangeText={setStepTitle}
         />
-        <AppButton title="Добавить этап" onPress={handleAddStage} />
+        <AppButton title="Добавить шаг" onPress={handleAddStepCard} />
       </View>
     );
   };
@@ -328,76 +382,206 @@ export default function ChallengeDetailsScreen() {
           </Text>
         </View>
 
-        <View style={styles.actions}>
-          <AppButton title="Редактировать" variant="secondary" onPress={handleEdit} />
-          <AppButton title="Удалить" variant="secondary" onPress={handleDelete} />
-        </View>
-
         {challenge.type === 'numeric' ? renderNumericDetails() : null}
         {challenge.type === 'daily' ? renderDailyDetails() : null}
         {challenge.type === 'project' ? renderProjectDetails() : null}
       </ScrollView>
+
+      <StepActionModal
+        visible={Boolean(actionStep)}
+        title={actionStepIndex >= 0 ? `Шаг ${actionStepIndex + 1}` : ''}
+        onClose={() => setActionStepId('')}
+        onEdit={() => actionStep && openEditStep(actionStep)}
+        onDelete={() => actionStep && confirmDeleteStep(actionStep)}
+      />
+
+      <StepEditModal
+        visible={Boolean(editingStep)}
+        stepTitle={editingStepTitle}
+        stepError={editingStepError}
+        stages={editingStepStages}
+        onChangeStepTitle={setEditingStepTitle}
+        onDeleteStage={confirmDeleteStageFromEditor}
+        onSave={saveEditedStep}
+        onCancel={closeEditStep}
+      />
     </SafeAreaView>
   );
 }
 
-type ProjectStageProps = {
-  stage: ProjectNode;
+type ProjectStepCardProps = {
+  index: number;
+  stepCard: ProjectNode;
   nodes: ProjectNode[];
-  stepTitle: string;
-  stepError?: string;
-  onStepTitleChange: (value: string) => void;
-  onAddStep: () => void;
-  onToggleStep: (stepId: string) => void;
+  stageTitle: string;
+  stageError?: string;
+  onStageTitleChange: (value: string) => void;
+  onAddStage: () => void;
+  onToggleStage: (stageId: string) => void;
+  onOpenActions: () => void;
 };
 
-function ProjectStage({
-  stage,
+function ProjectStepCard({
+  index,
+  stepCard,
   nodes,
-  stepTitle,
-  stepError,
-  onStepTitleChange,
-  onAddStep,
-  onToggleStep,
-}: ProjectStageProps) {
-  const steps = nodes
-    .filter((node) => node.parentId === stage.id)
+  stageTitle,
+  stageError,
+  onStageTitleChange,
+  onAddStage,
+  onToggleStage,
+  onOpenActions,
+}: ProjectStepCardProps) {
+  const stages = nodes
+    .filter((node) => node.parentId === stepCard.id)
     .sort((left, right) => left.orderIndex - right.orderIndex);
-  const stageProgress = calculateProjectStageProgress(stage, nodes);
+  const stepProgress = calculateProjectStageProgress(stepCard, nodes);
 
   return (
-    <View style={styles.stage}>
-      <View style={styles.stageHeader}>
-        <Text style={styles.stageTitle}>
-          {stage.title} — {formatProgressPercent(stageProgress)}
-        </Text>
-        <StatusBadge status={isProgressCompleted(stageProgress) ? 'completed' : 'active'} />
+    <View style={styles.stepCard}>
+      <View style={styles.stepCardHeader}>
+        <View style={styles.stepCardTitleBlock}>
+          <Text style={styles.stepCardEyebrow}>Шаг {index + 1}</Text>
+          <Text style={styles.stepCardTitle}>
+            {stepCard.title} — {formatProgressPercent(stepProgress)}
+          </Text>
+        </View>
+        <StatusBadge status={isProgressCompleted(stepProgress) ? 'completed' : 'active'} />
+        <ActionMenuButton onPress={onOpenActions} />
       </View>
 
-      {steps.length === 0 ? (
-        <Text style={styles.metaText}>Пока нет шагов.</Text>
+      {stages.length === 0 ? (
+        <Text style={styles.metaText}>Пока нет этапов внутри шага.</Text>
       ) : (
-        steps.map((step) => (
-          <Pressable
-            key={step.id}
-            style={({ pressed }) => [styles.stepRow, pressed && styles.pressed]}
-            onPress={() => onToggleStep(step.id)}>
-            <Text style={styles.stepText}>
-              {step.isCompleted ? '✓' : '○'} {step.title}
-            </Text>
-          </Pressable>
-        ))
+        <View style={styles.stageList}>
+          {stages.map((stage) => (
+            <ProjectStageRow
+              key={stage.id}
+              stage={stage}
+              onToggle={() => onToggleStage(stage.id)}
+            />
+          ))}
+        </View>
       )}
 
       <AppInput
-        label="Новый шаг"
-        placeholder="Название шага"
-        value={stepTitle}
-        error={stepError}
-        onChangeText={onStepTitleChange}
+        label="Новый этап"
+        placeholder="Название этапа"
+        value={stageTitle}
+        error={stageError}
+        onChangeText={onStageTitleChange}
       />
-      <AppButton title="Добавить шаг" variant="secondary" onPress={onAddStep} />
+      <AppButton title="Добавить этап" variant="secondary" onPress={onAddStage} />
     </View>
+  );
+}
+
+type ProjectStageRowProps = {
+  stage: ProjectNode;
+  onToggle: () => void;
+};
+
+function ProjectStageRow({ stage, onToggle }: ProjectStageRowProps) {
+  return (
+    <Pressable style={({ pressed }) => [styles.stageToggle, pressed && styles.pressed]} onPress={onToggle}>
+      <Text style={styles.stageText}>
+        {stage.isCompleted ? '✓' : '○'} {stage.title}
+      </Text>
+    </Pressable>
+  );
+}
+
+type StepActionModalProps = {
+  visible: boolean;
+  title: string;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+};
+
+function StepActionModal({ visible, title, onClose, onEdit, onDelete }: StepActionModalProps) {
+  return (
+    <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalCard}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{title}</Text>
+            <Pressable accessibilityRole="button" onPress={onClose} hitSlop={8}>
+              <Text style={styles.closeText}>×</Text>
+            </Pressable>
+          </View>
+          <View style={styles.modalActions}>
+            <AppButton title="Изменить" onPress={onEdit} />
+            <AppButton title="Удалить" variant="secondary" onPress={onDelete} />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+type StepEditModalProps = {
+  visible: boolean;
+  stepTitle: string;
+  stepError: string;
+  stages: ProjectNode[];
+  onChangeStepTitle: (value: string) => void;
+  onDeleteStage: (stage: ProjectNode) => void;
+  onSave: () => void;
+  onCancel: () => void;
+};
+
+function StepEditModal({
+  visible,
+  stepTitle,
+  stepError,
+  stages,
+  onChangeStepTitle,
+  onDeleteStage,
+  onSave,
+  onCancel,
+}: StepEditModalProps) {
+  return (
+    <Modal transparent animationType="fade" visible={visible} onRequestClose={onCancel}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalCard}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Изменить шаг</Text>
+            <Pressable accessibilityRole="button" onPress={onCancel} hitSlop={8}>
+              <Text style={styles.closeText}>×</Text>
+            </Pressable>
+          </View>
+
+          <AppInput
+            label="Название шага"
+            placeholder="Название шага"
+            value={stepTitle}
+            error={stepError}
+            onChangeText={onChangeStepTitle}
+          />
+
+          <View style={styles.editStageList}>
+            {stages.length === 0 ? (
+              <Text style={styles.metaText}>Внутри шага пока нет этапов.</Text>
+            ) : (
+              stages.map((stage) => (
+                <View key={stage.id} style={styles.editStageRow}>
+                  <Text style={styles.editStageText}>{stage.title}</Text>
+                  <Pressable accessibilityRole="button" onPress={() => onDeleteStage(stage)}>
+                    <Text style={styles.deleteText}>Удалить</Text>
+                  </Pressable>
+                </View>
+              ))
+            )}
+          </View>
+
+          <View style={styles.inlineActions}>
+            <AppButton title="Сохранить" onPress={onSave} />
+            <AppButton title="Отмена" variant="secondary" onPress={onCancel} />
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -433,9 +617,6 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 14,
   },
-  actions: {
-    gap: spacing.sm,
-  },
   section: {
     gap: spacing.md,
   },
@@ -450,26 +631,37 @@ const styles = StyleSheet.create({
   projectList: {
     gap: spacing.md,
   },
-  stage: {
-    gap: spacing.sm,
+  stepCard: {
+    gap: spacing.md,
     borderRadius: 8,
     borderColor: colors.border,
     borderWidth: 1,
     backgroundColor: colors.surface,
     padding: spacing.md,
   },
-  stageHeader: {
+  stepCardHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.sm,
   },
-  stageTitle: {
+  stepCardTitleBlock: {
     flex: 1,
+    gap: spacing.xs,
+  },
+  stepCardEyebrow: {
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  stepCardTitle: {
     color: colors.text,
     fontSize: 18,
     fontWeight: '700',
   },
-  stepRow: {
+  stageList: {
+    gap: spacing.xs,
+  },
+  stageToggle: {
     borderRadius: 6,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
@@ -477,9 +669,67 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.85,
   },
-  stepText: {
+  stageText: {
     color: colors.text,
     fontSize: 15,
     fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(16, 19, 24, 0.35)',
+    padding: spacing.lg,
+  },
+  modalCard: {
+    gap: spacing.md,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  modalTitle: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  closeText: {
+    color: colors.text,
+    fontSize: 28,
+    lineHeight: 28,
+    fontWeight: '700',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  editStageList: {
+    gap: spacing.sm,
+  },
+  editStageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: 6,
+    backgroundColor: colors.surfaceMuted,
+    padding: spacing.sm,
+  },
+  editStageText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  deleteText: {
+    color: colors.danger,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  inlineActions: {
+    gap: spacing.sm,
   },
 });

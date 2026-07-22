@@ -1,6 +1,7 @@
 import { forwardRef } from 'react';
 import { Pressable, StyleSheet, Text, View, type PressableProps } from 'react-native';
 
+import { ActionMenuButton } from '@/components/ActionMenuButton';
 import { ProgressBar } from '@/components/ProgressBar';
 import { StatusBadge, type StatusBadgeStatus } from '@/components/StatusBadge';
 import { colors } from '@/theme/colors';
@@ -11,11 +12,13 @@ export type ChallengeCardProps = PressableProps & {
   title: string;
   typeLabel: string;
   status: StatusBadgeStatus;
+  deadlineLabel: string;
   progressPercent: number;
+  onActionPress?: () => void;
 };
 
 export const ChallengeCard = forwardRef<View, ChallengeCardProps>(function ChallengeCard(
-  { title, typeLabel, status, progressPercent, style, ...props },
+  { title, typeLabel, status, deadlineLabel, progressPercent, onActionPress, style, ...props },
   ref,
 ) {
   return (
@@ -30,8 +33,17 @@ export const ChallengeCard = forwardRef<View, ChallengeCardProps>(function Chall
       <View style={styles.titleRow}>
         <Text style={styles.title}>{title}</Text>
         <StatusBadge status={status} />
+        {onActionPress ? (
+          <ActionMenuButton
+            onPress={(event) => {
+              event.stopPropagation();
+              onActionPress();
+            }}
+          />
+        ) : null}
       </View>
       <Text style={styles.meta}>{typeLabel}</Text>
+      <Text style={styles.meta}>{deadlineLabel}</Text>
       <ProgressBar progressPercent={progressPercent} />
       <Text style={styles.progress}>{formatProgressPercent(progressPercent)}</Text>
     </Pressable>

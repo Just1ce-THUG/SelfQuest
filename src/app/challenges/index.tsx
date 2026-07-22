@@ -1,5 +1,5 @@
-import { Link, type Href } from 'expo-router';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Link, router, type Href } from 'expo-router';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/AppButton';
@@ -55,11 +55,36 @@ export default function ChallengesScreen() {
   );
   const dailyEntriesByChallengeId = useChallengeStore((state) => state.dailyEntriesByChallengeId);
   const projectNodesByChallengeId = useChallengeStore((state) => state.projectNodesByChallengeId);
+  const deleteChallenge = useChallengeStore((state) => state.deleteChallenge);
   const progressState = {
     numericDataByChallengeId,
     numericEntriesByChallengeId,
     dailyEntriesByChallengeId,
     projectNodesByChallengeId,
+  };
+
+  const handleChallengeAction = (challenge: Challenge) => {
+    Alert.alert(challenge.title, undefined, [
+      {
+        text: 'Изменить',
+        onPress: () => router.push(`/challenges/${challenge.id}/edit` as Href),
+      },
+      {
+        text: 'Удалить',
+        style: 'destructive',
+        onPress: () => {
+          Alert.alert('Удалить челлендж?', 'Все данные прогресса будут удалены.', [
+            { text: 'Отмена', style: 'cancel' },
+            {
+              text: 'Удалить',
+              style: 'destructive',
+              onPress: () => deleteChallenge(challenge.id),
+            },
+          ]);
+        },
+      },
+      { text: 'Отмена', style: 'cancel' },
+    ]);
   };
 
   return (
@@ -81,7 +106,9 @@ export default function ChallengesScreen() {
                     title={challenge.title}
                     typeLabel={typeLabels[challenge.type]}
                     status={isProgressCompleted(progressPercent) ? 'completed' : 'active'}
+                    deadlineLabel={`${challenge.durationDays} дн. • до ${challenge.endDate}`}
                     progressPercent={progressPercent}
+                    onActionPress={() => handleChallengeAction(challenge)}
                   />
                 </Link>
               );

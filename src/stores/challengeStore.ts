@@ -63,6 +63,8 @@ export type ChallengeStoreState = {
   markDailyDay: (challengeId: string, date: string, status: DailyProgressStatus) => void;
   addProjectStage: (challengeId: string, title: string) => void;
   addProjectStep: (challengeId: string, stageId: string, title: string) => void;
+  updateProjectNodeTitle: (challengeId: string, nodeId: string, title: string) => void;
+  deleteProjectNode: (challengeId: string, nodeId: string) => void;
   toggleProjectStep: (challengeId: string, nodeId: string) => void;
 };
 
@@ -526,6 +528,41 @@ export const useChallengeStore = create<ChallengeStoreState>((set, get) => ({
           [challengeId]: [...nodes, step],
         },
         challenges: updateChallengeStatus(state.challenges, challengeId, 'active'),
+      };
+    });
+  },
+
+  updateProjectNodeTitle: (challengeId, nodeId, title) => {
+    set((state) => ({
+      projectNodesByChallengeId: {
+        ...state.projectNodesByChallengeId,
+        [challengeId]: (state.projectNodesByChallengeId[challengeId] ?? []).map((node) =>
+          node.id === nodeId ? { ...node, title, updatedAt: new Date().toISOString() } : node,
+        ),
+      },
+    }));
+  },
+
+  deleteProjectNode: (challengeId, nodeId) => {
+    set((state) => {
+      const nodes = state.projectNodesByChallengeId[challengeId] ?? [];
+      const idsToDelete = new Set([
+        nodeId,
+        ...nodes.filter((node) => node.parentId === nodeId).map((node) => node.id),
+      ]);
+      const nextNodes = nodes.filter((node) => !idsToDelete.has(node.id));
+      const progress = calculateProjectProgress(nextNodes);
+
+      return {
+        projectNodesByChallengeId: {
+          ...state.projectNodesByChallengeId,
+          [challengeId]: nextNodes,
+        },
+        challenges: updateChallengeStatus(
+          state.challenges,
+          challengeId,
+          getStatusFromProgress(progress.progressPercent),
+        ),
       };
     });
   },
