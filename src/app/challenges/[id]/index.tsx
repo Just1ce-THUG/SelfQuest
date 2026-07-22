@@ -101,7 +101,10 @@ export default function ChallengeDetailsScreen() {
   const [editingStepId, setEditingStepId] = useState('');
   const [editingStepTitle, setEditingStepTitle] = useState('');
   const [editingStepError, setEditingStepError] = useState('');
+  const [editingStageTitles, setEditingStageTitles] = useState<Record<string, string>>({});
+  const [editingStageErrors, setEditingStageErrors] = useState<Record<string, string>>({});
   const [pendingDeletedStageIds, setPendingDeletedStageIds] = useState<string[]>([]);
+  const [expandedStepIds, setExpandedStepIds] = useState<string[]>([]);
 
   if (!challenge || typeof id !== 'string') {
     return (
@@ -144,6 +147,9 @@ export default function ChallengeDetailsScreen() {
         .filter((node) => !pendingDeletedStageIds.includes(node.id))
         .sort((left, right) => left.orderIndex - right.orderIndex)
     : EMPTY_PROJECT_NODES;
+  const completedProjectSteps = projectStepCards.filter((step) =>
+    isProgressCompleted(calculateProjectStageProgress(step, projectNodes)),
+  ).length;
 
   const handleAddNumericProgress = () => {
     const value = parsePositiveNumber(numericValue);
@@ -190,10 +196,21 @@ export default function ChallengeDetailsScreen() {
   };
 
   const openEditStep = (step: ProjectNode) => {
+    const stages = projectNodes
+      .filter((node) => node.parentId === step.id)
+      .sort((left, right) => left.orderIndex - right.orderIndex);
+
     setActionStepId('');
     setEditingStepId(step.id);
     setEditingStepTitle(step.title);
     setEditingStepError('');
+    setEditingStageTitles(
+      stages.reduce<Record<string, string>>((result, stage) => {
+        result[stage.id] = stage.title;
+        return result;
+      }, {}),
+    );
+    setEditingStageErrors({});
     setPendingDeletedStageIds([]);
   };
 
@@ -201,6 +218,8 @@ export default function ChallengeDetailsScreen() {
     setEditingStepId('');
     setEditingStepTitle('');
     setEditingStepError('');
+    setEditingStageTitles({});
+    setEditingStageErrors({});
     setPendingDeletedStageIds([]);
   };
 
@@ -222,10 +241,15 @@ export default function ChallengeDetailsScreen() {
       {
         text: 'Удалить',
         style: 'destructive',
-        onPress: () =>
+        onPress: () => {
           setPendingDeletedStageIds((current) =>
             current.includes(stage.id) ? current : [...current, stage.id],
-          ),
+          );
+          setEditingStageErrors((current) => {
+            const { [stage.id]: _removed, ...nextErrors } = current;
+            return nextErrors;
+          });
+        },
       },
     ]);
   };
@@ -238,9 +262,40 @@ export default function ChallengeDetailsScreen() {
       return;
     }
 
+    const nextStageErrors = editingStepStages.reduce<Record<string, string>>((result, stage) => {
+      const stageTitle = editingStageTitles[stage.id] ?? stage.title;
+      const stageError = validateRequiredText(stageTitle, 'Название этапа не может быть пустым.');
+
+      if (stageError) {
+        result[stage.id] = stageError;
+      }
+
+      return result;
+    }, {});
+
+    if (Object.keys(nextStageErrors).length > 0) {
+      setEditingStageErrors(nextStageErrors);
+      return;
+    }
+
     updateProjectNodeTitle(challenge.id, editingStepId, editingStepTitle.trim());
+    editingStepStages.forEach((stage) => {
+      const nextTitle = (editingStageTitles[stage.id] ?? stage.title).trim();
+
+      if (nextTitle !== stage.title) {
+        updateProjectNodeTitle(challenge.id, stage.id, nextTitle);
+      }
+    });
     pendingDeletedStageIds.forEach((stageId) => deleteProjectNode(challenge.id, stageId));
     closeEditStep();
+  };
+
+  const toggleStepCollapsed = (stepId: string) => {
+    setExpandedStepIds((current) =>
+      current.includes(stepId)
+        ? current.filter((currentStepId) => currentStepId !== stepId)
+        : [...current, stepId],
+    );
   };
 
   const renderNumericDetails = () => {
@@ -324,7 +379,7 @@ export default function ChallengeDetailsScreen() {
       <View style={styles.section}>
         <ProgressBar progressPercent={progress.progressPercent} />
         <Text style={styles.bodyText}>
-          Готово этапов: {progress.completedLeafItems} / {progress.totalLeafItems}
+          Готово шагов: {completedProjectSteps} / {projectStepCards.length}
         </Text>
         <Text style={styles.bodyText}>Прогресс: {formatProgressPercent(progress.progressPercent)}</Text>
 
@@ -349,6 +404,8 @@ export default function ChallengeDetailsScreen() {
                 onAddStage={() => handleAddStageInsideStep(stepCard.id)}
                 onToggleStage={(stageId) => toggleProjectStep(challenge.id, stageId)}
                 onOpenActions={() => setActionStepId(stepCard.id)}
+                isCollapsed={!expandedStepIds.includes(stepCard.id)}
+                onToggleCollapsed={() => toggleStepCollapsed(stepCard.id)}
               />
             ))}
           </View>
@@ -401,6 +458,12 @@ export default function ChallengeDetailsScreen() {
         stepError={editingStepError}
         stages={editingStepStages}
         onChangeStepTitle={setEditingStepTitle}
+        stageTitles={editingStageTitles}
+        stageErrors={editingStageErrors}
+        onChangeStageTitle={(stageId, value) => {
+          setEditingStageTitles((current) => ({ ...current, [stageId]: value }));
+          setEditingStageErrors((current) => ({ ...current, [stageId]: '' }));
+        }}
         onDeleteStage={confirmDeleteStageFromEditor}
         onSave={saveEditedStep}
         onCancel={closeEditStep}
@@ -419,6 +482,8 @@ type ProjectStepCardProps = {
   onAddStage: () => void;
   onToggleStage: (stageId: string) => void;
   onOpenActions: () => void;
+  isCollapsed: boolean;
+  onToggleCollapsed: () => void;
 };
 
 function ProjectStepCard({
@@ -431,6 +496,8 @@ function ProjectStepCard({
   onAddStage,
   onToggleStage,
   onOpenActions,
+  isCollapsed,
+  onToggleCollapsed,
 }: ProjectStepCardProps) {
   const stages = nodes
     .filter((node) => node.parentId === stepCard.id)
@@ -439,39 +506,58 @@ function ProjectStepCard({
 
   return (
     <View style={styles.stepCard}>
-      <View style={styles.stepCardHeader}>
-        <View style={styles.stepCardTitleBlock}>
-          <Text style={styles.stepCardEyebrow}>Шаг {index + 1}</Text>
-          <Text style={styles.stepCardTitle}>
-            {stepCard.title} — {formatProgressPercent(stepProgress)}
-          </Text>
-        </View>
-        <StatusBadge status={isProgressCompleted(stepProgress) ? 'completed' : 'active'} />
-        <ActionMenuButton onPress={onOpenActions} />
-      </View>
-
-      {stages.length === 0 ? (
-        <Text style={styles.metaText}>Пока нет этапов внутри шага.</Text>
-      ) : (
-        <View style={styles.stageList}>
-          {stages.map((stage) => (
-            <ProjectStageRow
-              key={stage.id}
-              stage={stage}
-              onToggle={() => onToggleStage(stage.id)}
+      <Pressable
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.stepCardHeader, pressed && styles.pressed]}
+        onPress={onToggleCollapsed}>
+        <View style={styles.stepCardTopRow}>
+          <View style={styles.stepCardLabelRow}>
+            <View style={styles.chevronCircle}>
+              <Text style={styles.chevronText}>{isCollapsed ? '⌄' : '⌃'}</Text>
+            </View>
+            <Text style={styles.stepCardEyebrow}>Шаг {index + 1}</Text>
+          </View>
+          <View style={styles.stepCardControls}>
+            <StatusBadge status={isProgressCompleted(stepProgress) ? 'completed' : 'active'} />
+            <ActionMenuButton
+              onPress={(event) => {
+                event.stopPropagation();
+                onOpenActions();
+              }}
             />
-          ))}
+          </View>
         </View>
-      )}
+        <Text style={styles.stepCardTitle}>
+          {stepCard.title} — {formatProgressPercent(stepProgress)}
+        </Text>
+      </Pressable>
 
-      <AppInput
-        label="Новый этап"
-        placeholder="Название этапа"
-        value={stageTitle}
-        error={stageError}
-        onChangeText={onStageTitleChange}
-      />
-      <AppButton title="Добавить этап" variant="secondary" onPress={onAddStage} />
+      {!isCollapsed ? (
+        <View style={styles.stepCardBody}>
+          {stages.length === 0 ? (
+            <Text style={styles.metaText}>Пока нет этапов внутри шага.</Text>
+          ) : (
+            <View style={styles.stageList}>
+              {stages.map((stage) => (
+                <ProjectStageRow
+                  key={stage.id}
+                  stage={stage}
+                  onToggle={() => onToggleStage(stage.id)}
+                />
+              ))}
+            </View>
+          )}
+
+          <AppInput
+            label="Новый этап"
+            placeholder="Название этапа"
+            value={stageTitle}
+            error={stageError}
+            onChangeText={onStageTitleChange}
+          />
+          <AppButton title="Добавить этап" variant="secondary" onPress={onAddStage} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -484,9 +570,8 @@ type ProjectStageRowProps = {
 function ProjectStageRow({ stage, onToggle }: ProjectStageRowProps) {
   return (
     <Pressable style={({ pressed }) => [styles.stageToggle, pressed && styles.pressed]} onPress={onToggle}>
-      <Text style={styles.stageText}>
-        {stage.isCompleted ? '✓' : '○'} {stage.title}
-      </Text>
+      <Text style={styles.stageIndicator}>{stage.isCompleted ? '✓' : '○'}</Text>
+      <Text style={styles.stageText}>{stage.title}</Text>
     </Pressable>
   );
 }
@@ -501,7 +586,13 @@ type StepActionModalProps = {
 
 function StepActionModal({ visible, title, onClose, onEdit, onDelete }: StepActionModalProps) {
   return (
-    <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
+    <Modal
+      transparent
+      statusBarTranslucent
+      navigationBarTranslucent
+      animationType="fade"
+      visible={visible}
+      onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
@@ -525,7 +616,10 @@ type StepEditModalProps = {
   stepTitle: string;
   stepError: string;
   stages: ProjectNode[];
+  stageTitles: Record<string, string>;
+  stageErrors: Record<string, string>;
   onChangeStepTitle: (value: string) => void;
+  onChangeStageTitle: (stageId: string, value: string) => void;
   onDeleteStage: (stage: ProjectNode) => void;
   onSave: () => void;
   onCancel: () => void;
@@ -536,44 +630,64 @@ function StepEditModal({
   stepTitle,
   stepError,
   stages,
+  stageTitles,
+  stageErrors,
   onChangeStepTitle,
+  onChangeStageTitle,
   onDeleteStage,
   onSave,
   onCancel,
 }: StepEditModalProps) {
   return (
-    <Modal transparent animationType="fade" visible={visible} onRequestClose={onCancel}>
+    <Modal
+      transparent
+      statusBarTranslucent
+      navigationBarTranslucent
+      animationType="fade"
+      visible={visible}
+      onRequestClose={onCancel}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Изменить шаг</Text>
-            <Pressable accessibilityRole="button" onPress={onCancel} hitSlop={8}>
-              <Text style={styles.closeText}>×</Text>
-            </Pressable>
           </View>
 
-          <AppInput
-            label="Название шага"
-            placeholder="Название шага"
-            value={stepTitle}
-            error={stepError}
-            onChangeText={onChangeStepTitle}
-          />
+          <ScrollView
+            contentContainerStyle={styles.modalScrollContent}
+            keyboardShouldPersistTaps="handled">
+            <AppInput
+              label="Название шага"
+              placeholder="Название шага"
+              value={stepTitle}
+              error={stepError}
+              multiline
+              onChangeText={onChangeStepTitle}
+            />
 
-          <View style={styles.editStageList}>
-            {stages.length === 0 ? (
-              <Text style={styles.metaText}>Внутри шага пока нет этапов.</Text>
-            ) : (
-              stages.map((stage) => (
-                <View key={stage.id} style={styles.editStageRow}>
-                  <Text style={styles.editStageText}>{stage.title}</Text>
-                  <Pressable accessibilityRole="button" onPress={() => onDeleteStage(stage)}>
-                    <Text style={styles.deleteText}>Удалить</Text>
-                  </Pressable>
-                </View>
-              ))
-            )}
-          </View>
+            <View style={styles.editStageList}>
+              {stages.length === 0 ? (
+                <Text style={styles.metaText}>Внутри шага пока нет этапов.</Text>
+              ) : (
+                stages.map((stage) => (
+                  <View key={stage.id} style={styles.editStageRow}>
+                    <View style={styles.editStageInput}>
+                      <AppInput
+                        label="Этап"
+                        placeholder="Название этапа"
+                        value={stageTitles[stage.id] ?? stage.title}
+                        error={stageErrors[stage.id]}
+                        multiline
+                        onChangeText={(value) => onChangeStageTitle(stage.id, value)}
+                      />
+                    </View>
+                    <Pressable accessibilityRole="button" onPress={() => onDeleteStage(stage)}>
+                      <Text style={styles.deleteText}>Удалить</Text>
+                    </Pressable>
+                  </View>
+                ))
+              )}
+            </View>
+          </ScrollView>
 
           <View style={styles.inlineActions}>
             <AppButton title="Сохранить" onPress={onSave} />
@@ -640,28 +754,62 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   stepCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
     gap: spacing.sm,
   },
-  stepCardTitleBlock: {
+  stepCardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  stepCardLabelRow: {
     flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.xs,
   },
+  stepCardControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  chevronCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceMuted,
+  },
+  chevronText: {
+    color: colors.text,
+    fontSize: 20,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  stepCardBody: {
+    gap: spacing.md,
+  },
   stepCardEyebrow: {
+    flexShrink: 1,
     color: colors.textMuted,
     fontSize: 13,
     fontWeight: '700',
   },
   stepCardTitle: {
+    width: '100%',
     color: colors.text,
     fontSize: 18,
+    lineHeight: 24,
     fontWeight: '700',
   },
   stageList: {
     gap: spacing.xs,
   },
   stageToggle: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
     borderRadius: 6,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
@@ -669,15 +817,27 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.85,
   },
-  stageText: {
+  stageIndicator: {
+    width: 22,
     color: colors.text,
     fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  stageText: {
+    flex: 1,
+    minWidth: 0,
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 22,
     fontWeight: '600',
   },
   modalOverlay: {
+    ...StyleSheet.absoluteFill,
     flex: 1,
     justifyContent: 'center',
-    backgroundColor: 'rgba(16, 19, 24, 0.35)',
+    backgroundColor: 'rgba(16, 19, 24, 0.45)',
     padding: spacing.lg,
   },
   modalCard: {
@@ -685,6 +845,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: colors.surface,
     padding: spacing.md,
+    maxHeight: '88%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -707,27 +868,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
+  modalScrollContent: {
+    gap: spacing.md,
+    paddingBottom: spacing.xs,
+  },
   editStageList: {
     gap: spacing.sm,
   },
   editStageRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.sm,
     borderRadius: 6,
     backgroundColor: colors.surfaceMuted,
     padding: spacing.sm,
   },
-  editStageText: {
+  editStageInput: {
     flex: 1,
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '600',
   },
   deleteText: {
     color: colors.danger,
     fontSize: 14,
     fontWeight: '800',
+    marginTop: 32,
   },
   inlineActions: {
     gap: spacing.sm,
