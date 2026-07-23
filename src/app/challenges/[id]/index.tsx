@@ -11,7 +11,6 @@ import { ProgressBar } from '@/components/ProgressBar';
 import { StatusBadge } from '@/components/StatusBadge';
 import type {
   DailyProgressEntry,
-  DailyProgressStatus,
   NumericProgressEntry,
   ProjectNode,
 } from '@/features/challenges/types';
@@ -19,7 +18,14 @@ import { parsePositiveNumber, validateRequiredText } from '@/features/challenges
 import { useChallengeStore } from '@/stores/challengeStore';
 import { colors } from '@/theme/colors';
 import { spacing } from '@/theme/spacing';
-import { toDateKey } from '@/utils/dates';
+import {
+  calculateDailyStreak,
+  formatMonthYearRu,
+  getMonthCalendarDays,
+  isDateInChallengeRange,
+  isSameDate,
+  toDateKey,
+} from '@/utils/dates';
 import {
   calculateDailyProgress,
   calculateNumericProgress,
@@ -32,32 +38,7 @@ import {
 const EMPTY_NUMERIC_ENTRIES: NumericProgressEntry[] = [];
 const EMPTY_DAILY_ENTRIES: DailyProgressEntry[] = [];
 const EMPTY_PROJECT_NODES: ProjectNode[] = [];
-
-function addDays(dateKey: string, days: number) {
-  const date = new Date(`${dateKey}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return toDateKey(date);
-}
-
-function getDailyStatusLabel(status: DailyProgressStatus) {
-  if (status === 'completed') {
-    return 'Готово';
-  }
-  if (status === 'missed') {
-    return 'Пропуск';
-  }
-  return 'Пусто';
-}
-
-function getNextDailyStatus(status: DailyProgressStatus): DailyProgressStatus {
-  if (status === 'empty') {
-    return 'completed';
-  }
-  if (status === 'completed') {
-    return 'missed';
-  }
-  return 'empty';
-}
+const WEEKDAY_LABELS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
 export default function ChallengeDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -105,6 +86,7 @@ export default function ChallengeDetailsScreen() {
   const [editingStageErrors, setEditingStageErrors] = useState<Record<string, string>>({});
   const [pendingDeletedStageIds, setPendingDeletedStageIds] = useState<string[]>([]);
   const [expandedStepIds, setExpandedStepIds] = useState<string[]>([]);
+  const [dailyCalendarMonth, setDailyCalendarMonth] = useState(() => new Date());
 
   if (!challenge || typeof id !== 'string') {
     return (
@@ -166,6 +148,16 @@ export default function ChallengeDetailsScreen() {
 
   const handleMarkTodayCompleted = () => {
     markDailyDay(challenge.id, toDateKey(new Date()), 'completed');
+  };
+
+  const handleChangeDailyMonth = (offset: number) => {
+    setDailyCalendarMonth(
+      (currentMonth) => new Date(currentMonth.getFullYear(), currentMonth.getMonth() + offset, 1),
+    );
+  };
+
+  const handleToggleDailyDate = (dateKey: string, isCompleted: boolean) => {
+    markDailyDay(challenge.id, dateKey, isCompleted ? 'empty' : 'completed');
   };
 
   const handleAddStepCard = () => {
@@ -340,8 +332,16 @@ export default function ChallengeDetailsScreen() {
 
     const progress = calculateDailyProgress(challenge.durationDays, dailyEntries);
     const entriesByDate = Object.fromEntries(dailyEntries.map((entry) => [entry.date, entry]));
-    const days = Array.from({ length: challenge.durationDays }, (_, index) =>
-      addDays(challenge.startDate, index),
+    const calendarDays = getMonthCalendarDays(
+      dailyCalendarMonth.getFullYear(),
+      dailyCalendarMonth.getMonth(),
+    );
+    const todayKey = toDateKey(new Date());
+    const streak = calculateDailyStreak(
+      challenge.startDate,
+      challenge.durationDays,
+      dailyEntries,
+      todayKey,
     );
 
     return (
@@ -349,24 +349,79 @@ export default function ChallengeDetailsScreen() {
         <Text style={styles.bodyText}>Действие: {dailyData.dailyActionText}</Text>
         <ProgressBar progressPercent={progress.progressPercent} />
         <Text style={styles.bodyText}>
-          Выполнено дней: {progress.completedDays} / {challenge.durationDays}
+          Выполнено: {progress.completedDays} / {challenge.durationDays}
         </Text>
         <Text style={styles.bodyText}>Прогресс: {formatProgressPercent(progress.progressPercent)}</Text>
+        <Text style={styles.bodyText}>Серия: {streak} дней подряд</Text>
         <AppButton title="Выполнено сегодня" onPress={handleMarkTodayCompleted} />
 
-        <View style={styles.dayGrid}>
-          {days.map((date, index) => {
-            const status = entriesByDate[date]?.status ?? 'empty';
+        <View style={styles.calendar}>
+          <View style={styles.calendarHeader}>
+            <Pressable
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.calendarNavButton, pressed && styles.pressed]}
+              onPress={() => handleChangeDailyMonth(-1)}>
+              <Text style={styles.calendarNavText}>←</Text>
+            </Pressable>
+            <Text style={styles.calendarTitle}>{formatMonthYearRu(dailyCalendarMonth)}</Text>
+            <Pressable
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.calendarNavButton, pressed && styles.pressed]}
+              onPress={() => handleChangeDailyMonth(1)}>
+              <Text style={styles.calendarNavText}>→</Text>
+            </Pressable>
+          </View>
 
-            return (
-              <AppButton
-                key={date}
-                title={`${index + 1}. ${getDailyStatusLabel(status)}`}
-                variant={status === 'completed' ? 'primary' : 'secondary'}
-                onPress={() => markDailyDay(challenge.id, date, getNextDailyStatus(status))}
-              />
-            );
-          })}
+          <View style={styles.weekdayRow}>
+            {WEEKDAY_LABELS.map((weekday) => (
+              <Text key={weekday} style={styles.weekdayText}>
+                {weekday}
+              </Text>
+            ))}
+          </View>
+
+          <View style={styles.calendarGrid}>
+            {calendarDays.map((day, index) => {
+              if (!day.dateKey || !day.dayNumber) {
+                return <View key={`empty-${index}`} style={styles.calendarCell} />;
+              }
+
+              const isChallengeDay = isDateInChallengeRange(
+                day.dateKey,
+                challenge.startDate,
+                challenge.durationDays,
+              );
+              const isCompleted = entriesByDate[day.dateKey]?.status === 'completed';
+              const isToday = isSameDate(day.dateKey, todayKey);
+
+              return (
+                <Pressable
+                  key={day.dateKey}
+                  accessibilityRole={isChallengeDay ? 'button' : undefined}
+                  disabled={!isChallengeDay}
+                  style={({ pressed }) => [
+                    styles.calendarCell,
+                    isChallengeDay && styles.challengeDayCell,
+                    isToday && styles.todayCell,
+                    isCompleted && styles.completedDayCell,
+                    !isChallengeDay && styles.disabledDayCell,
+                    pressed && styles.pressed,
+                  ]}
+                  onPress={() => handleToggleDailyDate(day.dateKey as string, isCompleted)}>
+                  <Text
+                    style={[
+                      styles.calendarDayText,
+                      isChallengeDay && styles.challengeDayText,
+                      !isChallengeDay && styles.disabledDayText,
+                      isCompleted && styles.completedDayText,
+                    ]}>
+                    {day.dayNumber}
+                  </Text>
+                  {isCompleted ? <Text style={styles.completedMark}>×</Text> : null}
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       </View>
     );
@@ -739,8 +794,98 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
   },
-  dayGrid: {
+  calendar: {
+    gap: spacing.md,
+    borderRadius: 8,
+    borderColor: colors.border,
+    borderWidth: 1,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.sm,
+  },
+  calendarTitle: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  calendarNavButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceMuted,
+  },
+  calendarNavText: {
+    color: colors.text,
+    fontSize: 20,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+  weekdayRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  weekdayText: {
+    flex: 1,
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  calendarCell: {
+    width: '13.42%',
+    aspectRatio: 1,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceMuted,
+  },
+  challengeDayCell: {
+    backgroundColor: '#E4E9F2',
+  },
+  todayCell: {
+    borderColor: colors.primary,
+    borderWidth: 2,
+  },
+  completedDayCell: {
+    backgroundColor: '#DBEAFE',
+  },
+  disabledDayCell: {
+    opacity: 0.42,
+  },
+  calendarDayText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  challengeDayText: {
+    color: colors.text,
+  },
+  disabledDayText: {
+    color: colors.textMuted,
+  },
+  completedDayText: {
+    color: colors.text,
+  },
+  completedMark: {
+    position: 'absolute',
+    color: colors.primary,
+    fontSize: 24,
+    lineHeight: 26,
+    fontWeight: '800',
+    opacity: 0.82,
   },
   projectList: {
     gap: spacing.md,
