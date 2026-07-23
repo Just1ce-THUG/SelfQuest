@@ -10,6 +10,12 @@ export type NumericProgressResult = {
   progressPercent: number;
 };
 
+export type NumericProgressHistoryItem<TEntry> = {
+  entry: TEntry;
+  progressPercent: number;
+  totalCompleted: number;
+};
+
 export type DailyProgressResult = {
   completedDays: number;
   progressPercent: number;
@@ -46,6 +52,32 @@ export function calculateNumericProgress(
     remaining,
     progressPercent,
   };
+}
+
+export function calculateNumericProgressHistory<
+  TEntry extends Pick<NumericProgressEntry, 'value' | 'date' | 'createdAt'>,
+>(targetValue: number, entries: TEntry[]): NumericProgressHistoryItem<TEntry>[] {
+  const sortedEntries = [...entries].sort((left, right) => {
+    const dateCompare = left.date.localeCompare(right.date);
+
+    if (dateCompare !== 0) {
+      return dateCompare;
+    }
+
+    return left.createdAt.localeCompare(right.createdAt);
+  });
+  let totalCompleted = 0;
+
+  return sortedEntries.map((entry) => {
+    totalCompleted += entry.value;
+
+    return {
+      entry,
+      totalCompleted,
+      progressPercent: calculateNumericProgress(targetValue, [{ value: totalCompleted }])
+        .progressPercent,
+    };
+  });
 }
 
 export function calculateDailyProgress(

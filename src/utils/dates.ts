@@ -55,6 +55,21 @@ export function formatMonthYearRu(date: Date) {
   return `${MONTHS_RU[date.getMonth()]} ${date.getFullYear()}`;
 }
 
+export function formatHistoryDateRu(dateKey: string) {
+  const parts = new Intl.DateTimeFormat('ru-RU', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).formatToParts(dateKeyToLocalDate(dateKey));
+  const getPart = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? '';
+  const weekday = getPart('weekday');
+  const capitalizedWeekday = weekday ? `${weekday[0].toUpperCase()}${weekday.slice(1)}` : '';
+
+  return `${capitalizedWeekday}, ${getPart('day')} ${getPart('month')} ${getPart('year')}`;
+}
+
 export function getMonthCalendarDays(year: number, monthIndex: number): CalendarDay[] {
   const firstDay = new Date(year, monthIndex, 1);
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();

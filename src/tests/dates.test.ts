@@ -3,6 +3,7 @@
 import {
   calculateDailyStreak,
   formatMonthYearRu,
+  formatHistoryDateRu,
   getChallengeEndDate,
   getMonthCalendarDays,
   isDateInChallengeRange,
@@ -52,6 +53,10 @@ describe('date utils', () => {
 
   it('formats month and year in Russian', () => {
     expect(formatMonthYearRu(new Date(2026, 6, 1))).toBe('Июль 2026');
+  });
+
+  it('formats history date with Russian weekday and date', () => {
+    expect(formatHistoryDateRu('2026-07-22')).toBe('Среда, 22 июля 2026');
   });
 
   it('builds month calendar with weeks starting on Monday', () => {

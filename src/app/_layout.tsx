@@ -18,6 +18,7 @@ export default function RootLayout() {
         <Stack.Screen name="challenges/create" options={{ title: 'Создание челленджа' }} />
         <Stack.Screen name="challenges/[id]/index" options={{ title: 'Детали челленджа' }} />
         <Stack.Screen name="challenges/[id]/edit" options={{ title: 'Редактирование' }} />
+        <Stack.Screen name="challenges/[id]/history" options={{ title: 'История выполнений' }} />
       </Stack>
     </ThemeProvider>
   );

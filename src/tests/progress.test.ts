@@ -3,6 +3,7 @@
 import {
   calculateDailyProgress,
   calculateNumericProgress,
+  calculateNumericProgressHistory,
   calculateProjectProgress,
   calculateProjectStageProgress,
   calculateProjectStepProgress,
@@ -17,6 +18,27 @@ describe('progress utils', () => {
     expect(result.totalCompleted).toBe(50);
     expect(result.remaining).toBe(50);
     expect(result.progressPercent).toBe(50);
+  });
+
+  it('calculates numeric history progress cumulatively', () => {
+    const history = calculateNumericProgressHistory(1000, [
+      { value: 100, date: '2026-07-20', createdAt: '2026-07-20T10:00:00.000Z' },
+      { value: 150, date: '2026-07-21', createdAt: '2026-07-21T10:00:00.000Z' },
+      { value: 250, date: '2026-07-22', createdAt: '2026-07-22T10:00:00.000Z' },
+    ]);
+
+    expect(history.map((item) => item.progressPercent)).toEqual([10, 25, 50]);
+    expect(history.map((item) => item.totalCompleted)).toEqual([100, 250, 500]);
+  });
+
+  it('does not let numeric history progress exceed 100%', () => {
+    const history = calculateNumericProgressHistory(100, [
+      { value: 70, date: '2026-07-20', createdAt: '2026-07-20T10:00:00.000Z' },
+      { value: 50, date: '2026-07-21', createdAt: '2026-07-21T10:00:00.000Z' },
+    ]);
+
+    expect(history[1].progressPercent).toBe(100);
+    expect(formatProgressPercent(history[1].progressPercent)).toBe('100.0%');
   });
 
   it('does not let numeric progress exceed 100%', () => {

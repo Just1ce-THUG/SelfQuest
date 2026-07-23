@@ -300,20 +300,20 @@ export default function ChallengeDetailsScreen() {
     return (
       <View style={styles.section}>
         <ProgressBar progressPercent={progress.progressPercent} />
+        <Text style={styles.bodyText}>Прогресс: {formatProgressPercent(progress.progressPercent)}</Text>
         <Text style={styles.bodyText}>
           Сделано: {progress.totalCompleted} / {numericData.targetValue} {numericData.unit}
         </Text>
         <Text style={styles.bodyText}>
           Осталось: {progress.remaining} {numericData.unit}
         </Text>
-        <Text style={styles.bodyText}>Прогресс: {formatProgressPercent(progress.progressPercent)}</Text>
 
         {numericEntries.length === 0 ? (
           <Text style={styles.metaText}>Пока нет записей прогресса.</Text>
         ) : null}
 
         <AppInput
-          label="Сколько сделал сегодня"
+          label="Выполнено сегодня"
           placeholder="Например: 50"
           keyboardType="numeric"
           value={numericValue}
@@ -321,6 +321,11 @@ export default function ChallengeDetailsScreen() {
           onChangeText={setNumericValue}
         />
         <AppButton title="Добавить прогресс" onPress={handleAddNumericProgress} />
+        <AppButton
+          title="Посмотреть историю"
+          variant="secondary"
+          onPress={() => router.push(`/challenges/${challenge.id}/history` as Href)}
+        />
       </View>
     );
   };
