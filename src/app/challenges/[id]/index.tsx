@@ -336,6 +336,9 @@ export default function ChallengeDetailsScreen() {
       dailyCalendarMonth.getFullYear(),
       dailyCalendarMonth.getMonth(),
     );
+    const calendarWeeks = Array.from({ length: Math.ceil(calendarDays.length / 7) }, (_, index) =>
+      calendarDays.slice(index * 7, index * 7 + 7),
+    );
     const todayKey = toDateKey(new Date());
     const streak = calculateDailyStreak(
       challenge.startDate,
@@ -352,7 +355,7 @@ export default function ChallengeDetailsScreen() {
           Выполнено: {progress.completedDays} / {challenge.durationDays}
         </Text>
         <Text style={styles.bodyText}>Прогресс: {formatProgressPercent(progress.progressPercent)}</Text>
-        <Text style={styles.bodyText}>Серия: {streak} дней подряд</Text>
+        <Text style={styles.bodyText}>Дней подряд: {streak}</Text>
         <AppButton title="Выполнено сегодня" onPress={handleMarkTodayCompleted} />
 
         <View style={styles.calendar}>
@@ -381,46 +384,60 @@ export default function ChallengeDetailsScreen() {
           </View>
 
           <View style={styles.calendarGrid}>
-            {calendarDays.map((day, index) => {
-              if (!day.dateKey || !day.dayNumber) {
-                return <View key={`empty-${index}`} style={styles.calendarCell} />;
-              }
+            {calendarWeeks.map((week, weekIndex) => (
+              <View key={`week-${weekIndex}`} style={styles.calendarWeekRow}>
+                {week.map((day, dayIndex) => {
+                  if (!day.dateKey || !day.dayNumber) {
+                    return (
+                      <View
+                        key={`empty-${weekIndex}-${dayIndex}`}
+                        style={[styles.calendarCell, styles.emptyCalendarCell]}
+                      />
+                    );
+                  }
 
-              const isChallengeDay = isDateInChallengeRange(
-                day.dateKey,
-                challenge.startDate,
-                challenge.durationDays,
-              );
-              const isCompleted = entriesByDate[day.dateKey]?.status === 'completed';
-              const isToday = isSameDate(day.dateKey, todayKey);
+                  const isChallengeDay = isDateInChallengeRange(
+                    day.dateKey,
+                    challenge.startDate,
+                    challenge.durationDays,
+                  );
+                  const isCompleted = entriesByDate[day.dateKey]?.status === 'completed';
+                  const isToday = isSameDate(day.dateKey, todayKey);
 
-              return (
-                <Pressable
-                  key={day.dateKey}
-                  accessibilityRole={isChallengeDay ? 'button' : undefined}
-                  disabled={!isChallengeDay}
-                  style={({ pressed }) => [
-                    styles.calendarCell,
-                    isChallengeDay && styles.challengeDayCell,
-                    isToday && styles.todayCell,
-                    isCompleted && styles.completedDayCell,
-                    !isChallengeDay && styles.disabledDayCell,
-                    pressed && styles.pressed,
-                  ]}
-                  onPress={() => handleToggleDailyDate(day.dateKey as string, isCompleted)}>
-                  <Text
-                    style={[
-                      styles.calendarDayText,
-                      isChallengeDay && styles.challengeDayText,
-                      !isChallengeDay && styles.disabledDayText,
-                      isCompleted && styles.completedDayText,
-                    ]}>
-                    {day.dayNumber}
-                  </Text>
-                  {isCompleted ? <Text style={styles.completedMark}>×</Text> : null}
-                </Pressable>
-              );
-            })}
+                  return (
+                    <Pressable
+                      key={day.dateKey}
+                      accessibilityRole={isChallengeDay ? 'button' : undefined}
+                      disabled={!isChallengeDay}
+                      style={({ pressed }) => [
+                        styles.calendarCell,
+                        isChallengeDay && styles.challengeDayCell,
+                        isToday && styles.todayCell,
+                        isCompleted && styles.completedDayCell,
+                        !isChallengeDay && styles.disabledDayCell,
+                        pressed && styles.pressed,
+                      ]}
+                      onPress={() => handleToggleDailyDate(day.dateKey as string, isCompleted)}>
+                      <Text
+                        style={[
+                          styles.calendarDayText,
+                          isChallengeDay && styles.challengeDayText,
+                          !isChallengeDay && styles.disabledDayText,
+                          isCompleted && styles.completedDayText,
+                        ]}>
+                        {day.dayNumber}
+                      </Text>
+                      {isCompleted ? (
+                        <View pointerEvents="none" style={styles.completedMark}>
+                          <View style={[styles.completedMarkLine, styles.completedMarkLineForward]} />
+                          <View style={[styles.completedMarkLine, styles.completedMarkLineBackward]} />
+                        </View>
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
           </View>
         </View>
       </View>
@@ -840,17 +857,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   calendarGrid: {
+    gap: spacing.xs,
+  },
+  calendarWeekRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: spacing.xs,
   },
   calendarCell: {
-    width: '13.42%',
+    flex: 1,
     aspectRatio: 1,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surfaceMuted,
+    overflow: 'hidden',
+  },
+  emptyCalendarCell: {
+    backgroundColor: 'transparent',
   },
   challengeDayCell: {
     backgroundColor: '#E4E9F2',
@@ -868,7 +891,11 @@ const styles = StyleSheet.create({
   calendarDayText: {
     color: colors.text,
     fontSize: 14,
+    lineHeight: 16,
     fontWeight: '700',
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    includeFontPadding: false,
   },
   challengeDayText: {
     color: colors.text,
@@ -880,12 +907,23 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   completedMark: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completedMarkLine: {
     position: 'absolute',
-    color: colors.primary,
-    fontSize: 24,
-    lineHeight: 26,
-    fontWeight: '800',
+    width: '88%',
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: colors.primary,
     opacity: 0.82,
+  },
+  completedMarkLineForward: {
+    transform: [{ rotate: '45deg' }],
+  },
+  completedMarkLineBackward: {
+    transform: [{ rotate: '-45deg' }],
   },
   projectList: {
     gap: spacing.md,
