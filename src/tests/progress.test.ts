@@ -2,8 +2,11 @@
 
 import {
   calculateDailyProgress,
+  calculateNumericAveragePace,
   calculateNumericProgress,
   calculateNumericProgressHistory,
+  calculateNumericRequiredPerDay,
+  calculateNumericStats,
   calculateProjectProgress,
   calculateProjectStageProgress,
   calculateProjectStepProgress,
@@ -39,6 +42,47 @@ describe('progress utils', () => {
 
     expect(history[1].progressPercent).toBe(100);
     expect(formatProgressPercent(history[1].progressPercent)).toBe('100.0%');
+  });
+
+  it('recalculates numeric history progress after an entry changes', () => {
+    const history = calculateNumericProgressHistory(1000, [
+      { value: 100, date: '2026-07-20', createdAt: '2026-07-20T10:00:00.000Z' },
+      { value: 100, date: '2026-07-21', createdAt: '2026-07-21T10:00:00.000Z' },
+      { value: 300, date: '2026-07-22', createdAt: '2026-07-22T10:00:00.000Z' },
+    ]);
+
+    expect(history.map((item) => item.progressPercent)).toEqual([10, 20, 50]);
+  });
+
+  it('recalculates numeric history progress after an entry is deleted', () => {
+    const history = calculateNumericProgressHistory(1000, [
+      { value: 100, date: '2026-07-21', createdAt: '2026-07-21T10:00:00.000Z' },
+      { value: 300, date: '2026-07-22', createdAt: '2026-07-22T10:00:00.000Z' },
+    ]);
+
+    expect(history.map((item) => item.progressPercent)).toEqual([10, 40]);
+  });
+
+  it('calculates numeric average pace', () => {
+    expect(calculateNumericAveragePace(450, '2026-07-01', 30, '2026-07-10')).toBe(45);
+  });
+
+  it('calculates numeric required progress per day', () => {
+    expect(calculateNumericRequiredPerDay(150, '2026-07-01', 30, '2026-07-21')).toBe(15);
+    expect(calculateNumericRequiredPerDay(0, '2026-07-01', 30, '2026-07-21')).toBe(0);
+  });
+
+  it('calculates numeric stats together', () => {
+    const stats = calculateNumericStats(
+      1000,
+      [{ value: 100 }, { value: 350 }],
+      '2026-07-01',
+      30,
+      '2026-07-10',
+    );
+
+    expect(stats.averagePace).toBe(45);
+    expect(stats.requiredPerDay).toBe(26.19047619047619);
   });
 
   it('does not let numeric progress exceed 100%', () => {

@@ -29,6 +29,7 @@ import {
 import {
   calculateDailyProgress,
   calculateNumericProgress,
+  calculateNumericStats,
   calculateProjectProgress,
   calculateProjectStageProgress,
   formatProgressPercent,
@@ -39,6 +40,10 @@ const EMPTY_NUMERIC_ENTRIES: NumericProgressEntry[] = [];
 const EMPTY_DAILY_ENTRIES: DailyProgressEntry[] = [];
 const EMPTY_PROJECT_NODES: ProjectNode[] = [];
 const WEEKDAY_LABELS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+function formatStatNumber(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
 
 export default function ChallengeDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -296,6 +301,13 @@ export default function ChallengeDetailsScreen() {
     }
 
     const progress = calculateNumericProgress(numericData.targetValue, numericEntries);
+    const stats = calculateNumericStats(
+      numericData.targetValue,
+      numericEntries,
+      challenge.startDate,
+      challenge.durationDays,
+      toDateKey(new Date()),
+    );
 
     return (
       <View style={styles.section}>
@@ -321,6 +333,20 @@ export default function ChallengeDetailsScreen() {
           onChangeText={setNumericValue}
         />
         <AppButton title="Добавить прогресс" onPress={handleAddNumericProgress} />
+        <View style={styles.numericStatsGrid}>
+          <View style={[styles.numericStatCard, styles.numericStatCardPace]}>
+            <Text style={styles.numericStatTitle}>Средний темп</Text>
+            <Text style={styles.numericStatValue}>
+              {formatStatNumber(stats.averagePace)} {numericData.unit} в день
+            </Text>
+          </View>
+          <View style={[styles.numericStatCard, styles.numericStatCardRequired]}>
+            <Text style={styles.numericStatTitle}>Необходимо в день</Text>
+            <Text style={styles.numericStatValue}>
+              {formatStatNumber(stats.requiredPerDay)} {numericData.unit}
+            </Text>
+          </View>
+        </View>
         <AppButton
           title="Посмотреть историю"
           variant="secondary"
@@ -815,6 +841,33 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     lineHeight: 22,
+  },
+  numericStatsGrid: {
+    gap: spacing.sm,
+  },
+  numericStatCard: {
+    gap: spacing.xs,
+    borderRadius: 8,
+    borderColor: colors.border,
+    borderWidth: 1,
+    padding: spacing.md,
+  },
+  numericStatCardPace: {
+    backgroundColor: '#EEF6FF',
+  },
+  numericStatCardRequired: {
+    backgroundColor: '#F0FDF4',
+  },
+  numericStatTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  numericStatValue: {
+    color: colors.text,
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '800',
   },
   calendar: {
     gap: spacing.md,

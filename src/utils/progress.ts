@@ -16,6 +16,11 @@ export type NumericProgressHistoryItem<TEntry> = {
   totalCompleted: number;
 };
 
+export type NumericStatsResult = {
+  averagePace: number;
+  requiredPerDay: number;
+};
+
 export type DailyProgressResult = {
   completedDays: number;
   progressPercent: number;
@@ -29,6 +34,16 @@ export type ProjectProgressResult = {
 
 function clampProgress(value: number) {
   return Math.max(0, Math.min(value, 100));
+}
+
+function dateKeyToLocalTime(dateKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(year, month - 1, day).getTime();
+}
+
+function getInclusiveDaysBetween(startDate: string, endDate: string) {
+  const millisecondsInDay = 24 * 60 * 60 * 1000;
+  return Math.floor((dateKeyToLocalTime(endDate) - dateKeyToLocalTime(startDate)) / millisecondsInDay) + 1;
 }
 
 export function formatProgressPercent(value: number) {
@@ -78,6 +93,65 @@ export function calculateNumericProgressHistory<
         .progressPercent,
     };
   });
+}
+
+export function calculateNumericAveragePace(
+  totalCompleted: number,
+  startDate: string,
+  durationDays: number,
+  todayKey: string,
+) {
+  const elapsedDays = Math.min(
+    Math.max(getInclusiveDaysBetween(startDate, todayKey), 1),
+    Math.max(durationDays, 1),
+  );
+
+  return totalCompleted / elapsedDays;
+}
+
+export function calculateNumericRequiredPerDay(
+  remaining: number,
+  startDate: string,
+  durationDays: number,
+  todayKey: string,
+) {
+  if (remaining <= 0) {
+    return 0;
+  }
+
+  const endDateTime = dateKeyToLocalTime(startDate) + (Math.max(durationDays, 1) - 1) * 24 * 60 * 60 * 1000;
+  const endDate = new Date(endDateTime);
+  const endDateKey = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(
+    endDate.getDate(),
+  ).padStart(2, '0')}`;
+  const remainingDays = Math.max(getInclusiveDaysBetween(todayKey, endDateKey), 1);
+
+  return remaining / remainingDays;
+}
+
+export function calculateNumericStats(
+  targetValue: number,
+  entries: Pick<NumericProgressEntry, 'value'>[],
+  startDate: string,
+  durationDays: number,
+  todayKey: string,
+): NumericStatsResult {
+  const progress = calculateNumericProgress(targetValue, entries);
+
+  return {
+    averagePace: calculateNumericAveragePace(
+      progress.totalCompleted,
+      startDate,
+      durationDays,
+      todayKey,
+    ),
+    requiredPerDay: calculateNumericRequiredPerDay(
+      progress.remaining,
+      startDate,
+      durationDays,
+      todayKey,
+    ),
+  };
 }
 
 export function calculateDailyProgress(

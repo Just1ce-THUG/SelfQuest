@@ -60,6 +60,8 @@ export type ChallengeStoreState = {
   ) => void;
   deleteChallenge: (id: string) => void;
   addNumericProgress: (challengeId: string, value: number) => void;
+  updateNumericProgressEntry: (challengeId: string, entryId: string, value: number) => void;
+  deleteNumericProgressEntry: (challengeId: string, entryId: string) => void;
   markDailyDay: (challengeId: string, date: string, status: DailyProgressStatus) => void;
   addProjectStage: (challengeId: string, title: string) => void;
   addProjectStep: (challengeId: string, stageId: string, title: string) => void;
@@ -420,6 +422,51 @@ export const useChallengeStore = create<ChallengeStoreState>((set, get) => ({
 
     set((state) => {
       const nextEntries = [...(state.numericEntriesByChallengeId[challengeId] ?? []), entry];
+      const targetValue = state.numericDataByChallengeId[challengeId]?.targetValue ?? 0;
+      const progress = calculateNumericProgress(targetValue, nextEntries);
+
+      return {
+        numericEntriesByChallengeId: {
+          ...state.numericEntriesByChallengeId,
+          [challengeId]: nextEntries,
+        },
+        challenges: updateChallengeStatus(
+          state.challenges,
+          challengeId,
+          getStatusFromProgress(progress.progressPercent),
+        ),
+      };
+    });
+  },
+
+  updateNumericProgressEntry: (challengeId, entryId, value) => {
+    set((state) => {
+      const entries = state.numericEntriesByChallengeId[challengeId] ?? [];
+      const nextEntries = entries.map((entry) =>
+        entry.id === entryId ? { ...entry, value, updatedAt: new Date().toISOString() } : entry,
+      );
+      const targetValue = state.numericDataByChallengeId[challengeId]?.targetValue ?? 0;
+      const progress = calculateNumericProgress(targetValue, nextEntries);
+
+      return {
+        numericEntriesByChallengeId: {
+          ...state.numericEntriesByChallengeId,
+          [challengeId]: nextEntries,
+        },
+        challenges: updateChallengeStatus(
+          state.challenges,
+          challengeId,
+          getStatusFromProgress(progress.progressPercent),
+        ),
+      };
+    });
+  },
+
+  deleteNumericProgressEntry: (challengeId, entryId) => {
+    set((state) => {
+      const nextEntries = (state.numericEntriesByChallengeId[challengeId] ?? []).filter(
+        (entry) => entry.id !== entryId,
+      );
       const targetValue = state.numericDataByChallengeId[challengeId]?.targetValue ?? 0;
       const progress = calculateNumericProgress(targetValue, nextEntries);
 
